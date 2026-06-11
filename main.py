@@ -52,27 +52,46 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Path to directory where caption .txt files will be saved.",
     )
+    parser.add_argument(
+        "--model_dir",
+        type=str,
+        default="./Models",
+        help="Path to directory containing the model files.",
+    )
     return parser.parse_args()
 
 
 # ---------------------------------------------------------------------------
 # Pipeline initialisation
 # ---------------------------------------------------------------------------
-def load_pipeline():
+def load_pipeline(model_path: str):
     """Load the LLaVA-based JoyCaption pipeline with 4-bit quantisation."""
-    logger.info("Setting up 4-bit quantization config ...")
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,
-    )
+    if not model_path:
+        model_path = "./Models"
 
-    logger.info("Loading model pipeline (this may take a few minutes) ...")
-    pipe = pipeline(
-        "image-text-to-text",
-        model="fancyfeast/llama-joycaption-beta-one-hf-llava",
-        model_kwargs={"quantization_config": quantization_config},
-    )
+    if Path(model_path).is_dir():
+        logger.info("Loading local model from %s ...", model_path)
+        pipe = pipeline(
+            "image-text-to-text",
+            model=model_path,
+            quantization_config=BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.bfloat16,
+            ),
+        )
+    else:
+        logger.info("Loading model from Hugging Face Hub: %s", model_path)
+        pipe = pipeline(
+            "image-text-to-text",
+            model=model_path,
+            model_kwargs={"quantization_config": BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.bfloat16,
+            )}
+        )
+
     logger.info("Pipeline loaded successfully.")
     return pipe
 
