@@ -64,11 +64,8 @@ def parse_args() -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 # Pipeline initialisation
 # ---------------------------------------------------------------------------
-def load_pipeline(model_path: str):
+def load_pipeline(model_path: str = "./Models"):
     """Load the LLaVA-based JoyCaption pipeline with 4-bit quantisation."""
-    if not model_path:
-        model_path = "./Models"
-
     if Path(model_path).is_dir():
         logger.info("Loading local model from %s ...", model_path)
         pipe = pipeline(
@@ -180,7 +177,7 @@ def main():
 
     # Load model once --------------------------------------------------------
     try:
-        vlm_pipeline = load_pipeline()
+        vlm_pipeline = load_pipeline(args.model_dir)
     except Exception as exc:
         logger.exception(
             "Failed to load the JoyCaption pipeline. "
