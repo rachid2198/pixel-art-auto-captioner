@@ -13,10 +13,7 @@ from pathlib import Path
 from PIL import Image
 
 import torch
-from transformers import (
-    BitsAndBytesConfig,
-    pipeline,
-)
+from transformers import AutoProcessor, LlavaForConditionalGeneration, BitsAndBytesConfig
 
 # ---------------------------------------------------------------------------
 # Logging configuration
@@ -66,38 +63,48 @@ def parse_args() -> argparse.Namespace:
 # Pipeline initialisation
 # ---------------------------------------------------------------------------
 def load_pipeline(model_path: str = "./Models"):
-    """Load the LLaVA-based JoyCaption pipeline with 4-bit quantisation."""
-    quantization_config = BitsAndBytesConfig(
+    """Load the LLaVA-based JoyCaption pipeline from a local directory."""
+
+    # nf4 quantization config (unchanged)
+    nf4_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
+        bnb_4bit_quant_storage=torch.bfloat16,
+        bnb_4bit_use_double_quant=True,
         bnb_4bit_compute_dtype=torch.bfloat16,
     )
-    
-    if Path(model_path).is_dir():
-        logger.info("Loading local model from %s ...", model_path)
-        pipe = pipeline(
-            "image-text-to-text",
-            model=model_path,
-            device_map="cuda:0",
-            model_kwargs={"quantization_config": quantization_config}
-        )
-    else:
-        logger.info("Loading model from Hugging Face Hub: %s", model_path)
-        pipe = pipeline(
-            "image-text-to-text",
-            model=model_path,
-            device_map="cuda:0", 
-            model_kwargs={"quantization_config": quantization_config}
-        )
+
+    # Load processor and model from the local path
+    processor = AutoProcessor.from_pretrained(model_path)
+    processor.image_processor.size = {"height": 384, "width": 384}
+    processor.image_processor.do_resize = True
+
+    llava_model = LlavaForConditionalGeneration.from_pretrained(
+        model_path,
+        torch_dtype="bfloat16",
+        quantization_config=nf4_config,
+        device_map=0,
+    )
+    llava_model.eval()
+
+    # Fix the vision tower head (unchanged)
+    attention = llava_model.model.vision_tower.head.attention
+    attention.out_proj = torch.nn.Linear(
+        attention.embed_dim,
+        attention.embed_dim,
+        device=llava_model.device,
+        dtype=torch.bfloat16,
+    )
 
     logger.info("Pipeline loaded successfully.")
-    return pipe
+    return llava_model, processor
 
 
 # ---------------------------------------------------------------------------
 # Caption generation
 # ---------------------------------------------------------------------------
-def generate_caption(pipe, image_path: Path) -> str:
+@torch.inference_mode()
+def generate_caption(pipe, processor, image_path: Path) -> str:
     """
     Use the pipeline with separate image and text arguments.
     Returns the generated caption text.
@@ -107,31 +114,47 @@ def generate_caption(pipe, image_path: Path) -> str:
     except Exception as exc:
         logger.error("Failed to open image %s: %s", image_path, exc)
         return ""
+    
+    # build the prompt message
+    message = [
+        {
+            "role": "system",
+            "content": "You are a helpful image captioner.",
+        },
+        {
+            "role": "user",
+            "content": "Write a highly detailed, descriptive caption for this pixel art video game screenshot image.",
+        },
+    ]
+
+    convo_string = processor.apply_chat_template(message, tokenize=False, add_generation_prompt=True)
+    assert isinstance(convo_string, str)
+
+    # Process the inputs
+    inputs = processor(text=[convo_string], images=[image], return_tensors="pt").to('cuda')
+    inputs['pixel_values'] = inputs['pixel_values'].to(torch.bfloat16)
 
     try:
-        # Pass image and text directly – the pipeline handles the chat template
-        result = pipe(
-            image=image,
-            text="Write a highly detailed, descriptive caption for this pixel art image.",
-            max_new_tokens=256,
-            generate_kwargs={"do_sample": True},
-        )
+        # Generate the captions
+        generate_ids = pipe.generate(
+            **inputs,
+            max_new_tokens=512,
+            do_sample=True,
+            suppress_tokens=None,
+            use_cache=True,
+            temperature=0.6,
+            top_k=None,
+            top_p=0.9,
+        )[0]
 
-        # The pipeline may return a list of dicts with 'generated_text'
-        if isinstance(result, list) and len(result) > 0:
-            first = result[0]
-            if isinstance(first, dict) and "generated_text" in first:
-                return first["generated_text"].strip()
-            # Sometimes it returns a list of strings
-            if isinstance(first, str):
-                return first.strip()
+        # Trim off the prompt
+        generate_ids = generate_ids[inputs['input_ids'].shape[1]:]
 
-        # Fallback: if result is a plain string
-        if isinstance(result, str):
-            return result.strip()
+        # Decode the caption
+        caption = processor.tokenizer.decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        caption = caption.strip()
 
-        # Last resort: convert whatever we got to string
-        return str(result).strip()
+        return caption
 
     except Exception as exc:
         logger.error("Caption generation failed: %s", exc)
@@ -172,7 +195,7 @@ def main():
 
     # Load model once --------------------------------------------------------
     try:
-        vlm_pipeline = load_pipeline(args.model_dir)
+        vlm_pipeline, vlm_processor = load_pipeline(args.model_dir)
     except Exception as exc:
         logger.exception(
             "Failed to load the JoyCaption pipeline. "
@@ -196,7 +219,7 @@ def main():
         logger.info("Processing: %s", img_path.name)
 
         try:
-            caption = generate_caption(vlm_pipeline, img_path)
+            caption = generate_caption(vlm_pipeline, vlm_processor, img_path)
             if caption:  # Only save if we got a valid caption
                 caption_path.write_text(caption, encoding="utf-8")
                 logger.info("Saved: %s", caption_path.name)
