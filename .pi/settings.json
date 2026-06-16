@@ -1,0 +1,21 @@
+{
+  "enableSkillCommands": true,
+  "enabledModels": [
+    "deepseek-v4-pro*",
+    "deepseek-v4-flash*",
+    "deepseek-*"
+  ],
+  "sessionDir": ".pi/sessions",
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 16384,
+    "keepRecentTokens": 20000
+  },
+  "terminal": {
+    "showImages": true,
+    "imageWidthCells": 50
+  },
+  "images": {
+    "autoResize": true
+  }
+}

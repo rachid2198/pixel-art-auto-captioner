@@ -44,6 +44,19 @@ output_prompts/
 output/
 captions/
 
+# Local dataset workspace: keep placeholders, ignore contents
+data/raw/*
+!data/raw/.gitkeep
+data/interim/*
+!data/interim/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/exports/*
+!data/exports/.gitkeep
+
+# Pi local session data
+.pi/sessions/
+
 # OS files
 .DS_Store
 Thumbs.db
