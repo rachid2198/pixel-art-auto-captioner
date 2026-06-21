@@ -371,6 +371,16 @@ Two formats are supported, both produced from the same `CaptionRecord`:
 - **Content:** One JSON object per line, per the schema in §6.2.
 - **Purpose:** Machine-readable, full metadata, filterable by model/prompt/params.
 
+### 7.3 Visual Evaluation Deck (`index.html`)
+
+To eliminate human evaluation friction, the runner will automatically compile a lightweight, standalone `index.html` file in the output directory upon execution completion.
+
+- **Layout:** A clean browser grid displaying all processed images.
+- **Content:** Hovering or clicking on a pixel-art image dynamically displays its generated caption, token counts, processing time, and confidence parameters side-by-side.
+- **Validation:** The HTML file includes a client-side JavaScript validator that checks whether the companion `.txt` and `.jsonl` entries are structurally present and aligned with the images on disk. If a sidecar file is missing or malformed, the corresponding image card highlights in red to flag a pipeline failure visually.
+
+Implementation responsibility: `export_utils.py` provides a `generate_visual_deck()` function; the runner calls it after all images are processed. The `index.html` is self-contained (no external CSS/JS dependencies) and viewable directly in any modern browser.
+
 ---
 
 ## 8. Configuration
@@ -610,7 +620,7 @@ pixel-art-auto-captioner/
 │           ├── __init__.py
 │           ├── types.py             # ImageRecord, CaptionRecord
 │           ├── image_utils.py       # load_image, validate_image
-│           └── export_utils.py      # save_txt_sidecar, save_jsonl_entry
+│           └── export_utils.py      # save_txt_sidecar, save_jsonl_entry, generate_visual_deck
 │
 ├── scripts/
 │   └── run_caption.py               # Thin CLI entry point
@@ -673,7 +683,7 @@ Recommended order, smallest useful increment first:
 | 5 | `captioning/base.py` — `CaptionModel` ABC | (no separate tests — tested via concrete impl) |
 | 6 | `captioning/joycaption.py` — `JoyCaptionModel` | `test_model.py` |
 | 7 | `batch/runner.py` — `CaptionRunner` | `test_runner.py` |
-| 8 | `scripts/run_caption.py` — CLI entry point | Manual integration test |
+| 8 | `scripts/run_caption.py` — CLI entry point (instantiates `index.html` via export utilities) | Manual integration test |
 | 9 | `configs/example_config.json` | — |
 
 Steps 1-4 can be implemented and tested without a GPU. Steps 5-7 require a GPU for meaningful testing. Steps 1-4 produce useful, testable code immediately and establish the data types the rest of the pipeline depends on.

@@ -61,17 +61,17 @@ You are an **implementation agent** executing the architecture defined in `SPEC.
 
 Follow SPEC `§15` exactly. One step at a time. Do not proceed to step N+1 until step N is complete and tested.
 
-| Step | File to write | Test file | GPU Required? |
-|------|---------------|-----------|:---:|
-| 1 | `common/types.py` | `test_types.py` | No |
-| 2 | `common/image_utils.py` | `test_image_utils.py` | No |
-| 3 | `ingestion/dataloader.py` | `test_dataloader.py` | No |
-| 4 | `common/export_utils.py` | `test_export_utils.py` | No |
-| 5 | `captioning/base.py` | (via step 6) | No |
-| 6 | `captioning/joycaption.py` | `test_model.py` | Yes |
-| 7 | `batch/runner.py` | `test_runner.py` | Yes |
-| 8 | `scripts/run_caption.py` | Manual | Yes |
-| 9 | `configs/example_config.json` | — | No |
+| Step | File to write | Test file | GPU Required? | Target Engine |
+|------|---------------|-----------|:---:|:---:|
+| 1 | `common/types.py` | `test_types.py` | No | `qwen/qwen3-coder:free` |
+| 2 | `common/image_utils.py` | `test_image_utils.py` | No | `openrouter/deepseek/deepseek-v4-flash` |
+| 3 | `ingestion/dataloader.py` | `test_dataloader.py` | No | `openrouter/deepseek/deepseek-v4-flash` |
+| 4 | `common/export_utils.py` | `test_export_utils.py` | No | `openrouter/deepseek/deepseek-v4-flash` |
+| 5 | `captioning/base.py` | (via step 6) | No | `qwen/qwen3-coder:free` |
+| 6 | `captioning/joycaption.py` | `test_model.py` | Yes | `openrouter/deepseek/deepseek-v4-pro` |
+| 7 | `batch/runner.py` | `test_runner.py` | Yes | `openrouter/deepseek/deepseek-v4-flash` |
+| 8 | `scripts/run_caption.py` | Manual | Yes | `openrouter/deepseek/deepseek-v4-flash` |
+| 9 | `configs/example_config.json` | — | No | `qwen/qwen3-coder:free` |
 
 - **GPU-free steps (1-4, 5, 9):** Fully implement and test now.
 - **GPU-requiring steps (6-8):** Implement code, verify syntax and imports. Mark tests with `@pytest.mark.gpu` and design them to `pytest.skip` when CUDA is unavailable.
@@ -105,6 +105,15 @@ On every single turn, before writing any implementation code:
    - Document exact test results (pass/fail counts, any terminal output)
    - Declare the next targeted file
 5. **Never skip or combine steps.** If `TODO.md` shows step 3 is next, you write step 3 — not step 4.
+
+### 4.2 Iterative Workflow Improvement Clause
+
+Immediately upon completing step N and running its unit tests, **before** marking it as complete in `TODO.md`, you must output a concise 2-sentence **Friction &amp; Streamlining Note** inside the `TODO.md` completion log. The note must explicitly cover:
+
+1. **Friction point:** What was the single biggest mechanical or structural friction point during this coding step (e.g., unexpected library behaviour, type mismatch, platform-specific path parsing)?
+2. **Streamlining guardrail:** What specific guardrail could be added to `AGENTS.md` or `SPEC.md` to ensure an agent executing this code in the future avoids this block?
+
+This clause creates a self-improving feedback loop: every step that costs time leaves a trail that prevents the same cost from recurring.
 
 ---
 
