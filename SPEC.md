@@ -105,8 +105,9 @@ src/pixel_art_auto_captioner/
 class ImageRecord:
     """A single image ready for captioning."""
     path: Path              # absolute path to image file
-    stem: str               # relative-path identifier from input_root
-                            # (e.g. "folder1_sprite" instead of "sprite")
+    stem: str               # filename without extension (e.g. "sprite")
+    rel_path: Path          # path relative to input_root
+                            # (e.g. Path("folder1/sprite.png"))
     image: Image.Image      # loaded PIL image (RGB)
     width: int              # original pixel width
     height: int             # original pixel height
@@ -115,7 +116,9 @@ class ImageRecord:
 class CaptionRecord:
     """A generated caption linked to its source image."""
     image_path: Path        # source image path
-    image_stem: str         # relative-path identifier (matches ImageRecord.stem)
+    image_stem: str         # filename without extension (matches ImageRecord.stem)
+    image_rel_path: Path    # relative path from input_root
+                            # (matches ImageRecord.rel_path)
     caption_text: str       # generated caption string
     model_name: str         # e.g. "joycaption-beta-one"
     prompt_template: str    # the user prompt used
@@ -323,14 +326,14 @@ Logged events:
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `load_image` | `(path: Path, input_root: Path, target_size: tuple[int,int] \| None = None) -> ImageRecord` | Opens an image, converts to RGB, optionally resizes. ``stem`` is computed as the relative path from *input_root* with path separators replaced by underscores (e.g. ``"folder1_sprite"``). Raises ``ValueError`` if *path* is not under *input_root*. |
+| `load_image` | `(path: Path, input_root: Path, target_size: tuple[int,int] \| None = None) -> ImageRecord` | Opens an image, converts to RGB, optionally resizes. ``stem`` is the bare filename without extension; ``rel_path`` captures the path relative to *input_root* for directory-preserving output. Raises ``ValueError`` if *path* is not under *input_root*. |
 | `validate_image` | `(path: Path) -> bool` | Returns `True` if the file can be opened as a valid image |
 
 ### 6.2 `export_utils.py`
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `save_txt_sidecar` | `(record: CaptionRecord, output_dir: Path) -> Path` | Writes `{stem}.txt` containing just the caption text |
+| `save_txt_sidecar` | `(record: CaptionRecord, output_dir: Path) -> Path` | Writes ``{image_rel_path.with_suffix('.txt')}`` under *output_dir*, preserving the input directory structure (e.g. ``output/folder1/sprite.txt``) |
 | `save_jsonl_entry` | `(record: CaptionRecord, output_dir: Path) -> Path` | Appends one JSON line to `captions.jsonl` in output_dir |
 | `build_record` | `(image: ImageRecord, caption: str, model_name: str, prompt: str, gen_params: dict) -> CaptionRecord` | Constructs a `CaptionRecord` with UTC timestamp |
 
@@ -362,7 +365,7 @@ Two formats are supported, both produced from the same `CaptionRecord`:
 
 ### 7.1 Sidecar text (`.txt`)
 
-- **Path:** `{output_dir}/{image_stem}.txt`
+- **Path:** `{output_dir}/{image_rel_path.with_suffix('.txt')}`, preserving the input directory structure (e.g. ``output/folder1/sprite.txt``).
 - **Content:** caption text only, UTF-8 encoded.
 - **Purpose:** Human-readable, matches the reference `main.py` output convention.
 

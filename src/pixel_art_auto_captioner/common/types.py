@@ -17,10 +17,11 @@ class ImageRecord:
 
     Attributes:
         path: Absolute path to the source image file on disk.
-        stem: Relative-path identifier from the ``input_root`` directory,
-            with path separators replaced by underscores
-            (e.g. ``"folder1_sprite"``).  Uniquely identifies the image
-            across nested source directories.
+        stem: Filename without extension (e.g. ``"sprite"``).
+        rel_path: Path relative to the ``input_root`` directory
+            (e.g. ``Path("folder1/sprite.png")``).  Used by export
+            utilities to reconstruct output paths that mirror the
+            original input directory tree.
         image: The decoded image as a PIL Image in RGB mode.
         width: Original image width in pixels.
         height: Original image height in pixels.
@@ -28,6 +29,7 @@ class ImageRecord:
 
     path: Path
     stem: str
+    rel_path: Path
     image: PIL.Image.Image
     width: int
     height: int
@@ -39,9 +41,11 @@ class CaptionRecord:
 
     Attributes:
         image_path: Absolute path to the source image file.
-        image_stem: Relative-path identifier (matches
-            ``ImageRecord.stem``).  E.g. ``"folder1_sprite"`` instead
-            of just ``"sprite"``.
+        image_stem: Filename without extension (matches
+            ``ImageRecord.stem``).  E.g. ``"sprite"``.
+        image_rel_path: Path relative to input root (matches
+            ``ImageRecord.rel_path``).  Used to place output files
+            preserving the original directory structure.
         caption_text: The generated caption string.
         model_name: Identifier for the VLM that produced the caption
             (e.g. ``"joycaption-beta-one"``).
@@ -56,6 +60,7 @@ class CaptionRecord:
 
     image_path: Path
     image_stem: str
+    image_rel_path: Path
     caption_text: str
     model_name: str
     prompt_template: str

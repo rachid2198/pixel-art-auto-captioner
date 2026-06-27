@@ -32,23 +32,28 @@
 
   Next targeted file: `ingestion/dataloader.py`.
 
-- **2026-06-24 — Fix: Duplicate filename collision.**
-  `load_image()` now accepts an `input_root: Path` parameter and computes
-  ``stem`` as ``"_".join(path.relative_to(input_root).with_suffix("").parts)``.
-  This gives unique identifiers like ``"folder1_sprite"`` instead of the
-  ambiguous bare stem ``"sprite"``, preventing output-file collisions when
-  duplicate filenames exist in different subdirectories.
+- **2026-06-27 — Fix: Output path strategy changed to directory-preserving.**
+  Reverted the flattened-stem approach. ``ImageRecord.stem`` is now the
+  bare filename (e.g. ``"sprite"``), and a new ``rel_path`` field captures
+  the full relative path from ``input_root`` (e.g. ``Path("folder1/sprite.png")``).
+  ``CaptionRecord`` gains ``image_rel_path``. Export utilities will use
+  ``image_rel_path`` to reconstruct output paths that mirror the input
+  directory tree (``output/folder1/sprite.txt`` instead of
+  ``output/folder1_sprite.txt``).
 
   **Changes:**
-  - `types.py`: Updated docstrings for `ImageRecord.stem` and
-    `CaptionRecord.image_stem`.
-  - `image_utils.py`: Added `input_root` parameter to `load_image()`;
-    stem computed via ``path.relative_to(input_root)`` with separator
-    replacement. Raises `ValueError` if path not under input_root.
-  - `SPEC.md` §2.3 and §6.1: Updated signatures and docstrings.
-  - `test_types.py`: Stem values changed to relative-path identifiers.
-  - `test_image_utils.py`: All `load_image` tests pass `input_root`;
-    4 new tests added (subdir stem, deeply nested, not-under-root,
-    duplicate-filename uniqueness).
+  - `types.py`: Added ``rel_path: Path`` to ``ImageRecord``, ``image_rel_path: Path``
+    to ``CaptionRecord``. Reverted ``stem``/``image_stem`` docstrings to bare
+    filename semantics.
+  - `image_utils.py`: ``load_image()`` now returns ``stem=path.stem`` and
+    ``rel_path=relative_to(input_root)``. Removed the underscore-joining logic.
+  - `test_types.py`: All 10 tests updated with ``rel_path``/``image_rel_path`` fields.
+  - `test_image_utils.py``: Stem tests now assert bare filenames.  Added
+    ``test_load_image_stem_is_bare_filename``, ``test_load_image_rel_path_in_subdir``,
+    ``test_load_image_rel_path_deeply_nested``,
+    ``test_load_image_rel_path_distinguishes_duplicate_names``. Removed obsolete
+    underscore-collision tests.  Total: 21 tests.
+  - `SPEC.md`: Updated §2.3 (data types), §6.1 (load_image), §6.2 (export utils),
+    §7.1 (output paths).
 
-  Tests: 31 passed, 0 failed (10 types + 21 image_utils).
+  Tests: 32 passed, 0 failed.

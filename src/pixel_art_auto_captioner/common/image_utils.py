@@ -34,10 +34,10 @@ def load_image(
 
     Args:
         path: Absolute or relative path to an image file.
-        input_root: Root directory of the image source.  The ``stem``
-            of the returned ``ImageRecord`` is computed as the relative
-            path from this root, with path separators replaced by
-            underscores (e.g. ``"folder1_sprite"``).
+        input_root: Root directory of the image source.  The ``rel_path``
+            of the returned ``ImageRecord`` is computed relative to this
+            root.  Used by export utilities to reconstruct the original
+            directory structure in the output tree.
         target_size: Optional ``(width, height)`` tuple. If provided, the
             image is resized to this exact size using ``Image.LANCZOS``.
 
@@ -64,19 +64,18 @@ def load_image(
     if target_size is not None:
         img = img.resize(target_size, Image.LANCZOS)
 
-    # Build a unique relative-path identifier
+    # Compute relative path for directory-preserving output
     try:
         rel = path.resolve().relative_to(input_root.resolve())
     except ValueError:
         raise ValueError(
             f"Image path {path} is not under input_root {input_root}"
         )
-    rel_stem = rel.with_suffix("")
-    stem = "_".join(rel_stem.parts)
 
     return ImageRecord(
         path=path.resolve(),
-        stem=stem,
+        stem=path.stem,
+        rel_path=rel,
         image=img,
         width=img.width,
         height=img.height,

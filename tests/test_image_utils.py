@@ -27,6 +27,7 @@ def test_load_image_returns_image_record(tmp_path: Path):
     assert isinstance(record, ImageRecord)
     assert record.path == file_path.resolve()
     assert record.stem == "sprite"
+    assert record.rel_path == Path("sprite.png")
     assert record.image.size == (64, 32)
     assert record.image.mode == "RGB"
     assert record.width == 64
@@ -129,9 +130,9 @@ def test_load_image_path_is_directory(tmp_path: Path):
         load_image(input_root, input_root)
 
 
-def test_load_image_relative_stem_in_subdir(tmp_path: Path):
-    """load_image computes stem as underscored relative path when image
-    is in a subdirectory of input_root."""
+def test_load_image_stem_is_bare_filename(tmp_path: Path):
+    """load_image sets ``stem`` to just the filename without extension,
+    not a flattened relative path."""
     input_root = tmp_path / "input"
     sub_dir = input_root / "folder1"
     sub_dir.mkdir(parents=True)
@@ -140,11 +141,25 @@ def test_load_image_relative_stem_in_subdir(tmp_path: Path):
 
     record = load_image(file_path, input_root)
 
-    assert record.stem == "folder1_sprite"
+    assert record.stem == "sprite"
 
 
-def test_load_image_relative_stem_deeply_nested(tmp_path: Path):
-    """load_image handles deeply nested paths correctly."""
+def test_load_image_rel_path_in_subdir(tmp_path: Path):
+    """load_image captures the relative path from input_root when the
+    image is in a subdirectory."""
+    input_root = tmp_path / "input"
+    sub_dir = input_root / "folder1"
+    sub_dir.mkdir(parents=True)
+    file_path = sub_dir / "sprite.png"
+    Image.new("RGB", (16, 16)).save(file_path)
+
+    record = load_image(file_path, input_root)
+
+    assert record.rel_path == Path("folder1/sprite.png")
+
+
+def test_load_image_rel_path_deeply_nested(tmp_path: Path):
+    """load_image captures deeply nested relative paths correctly."""
     input_root = tmp_path / "input"
     sub_dir = input_root / "a" / "b" / "c"
     sub_dir.mkdir(parents=True)
@@ -153,7 +168,7 @@ def test_load_image_relative_stem_deeply_nested(tmp_path: Path):
 
     record = load_image(file_path, input_root)
 
-    assert record.stem == "a_b_c_img"
+    assert record.rel_path == Path("a/b/c/img.png")
 
 
 def test_load_image_path_not_under_input_root(tmp_path: Path):
@@ -168,9 +183,9 @@ def test_load_image_path_not_under_input_root(tmp_path: Path):
         load_image(outside, input_root)
 
 
-def test_load_image_stem_unique_for_duplicate_filenames(tmp_path: Path):
-    """load_image produces distinct stems for same filename in different
-    subdirectories, preventing output file collisions."""
+def test_load_image_rel_path_distinguishes_duplicate_names(tmp_path: Path):
+    """load_image produces distinct rel_paths for same-named files in
+    different subdirectories, enabling directory-preserving output."""
     input_root = tmp_path / "input"
     sub_a = input_root / "chars" / "heroes"
     sub_b = input_root / "chars" / "enemies"
@@ -185,9 +200,14 @@ def test_load_image_stem_unique_for_duplicate_filenames(tmp_path: Path):
     record_a = load_image(path_a, input_root)
     record_b = load_image(path_b, input_root)
 
-    assert record_a.stem == "chars_heroes_sprite"
-    assert record_b.stem == "chars_enemies_sprite"
-    assert record_a.stem != record_b.stem
+    # Both have the same stem (bare filename)
+    assert record_a.stem == "sprite"
+    assert record_b.stem == "sprite"
+
+    # But distinct rel_paths reflecting their subdirectories
+    assert record_a.rel_path == Path("chars/heroes/sprite.png")
+    assert record_b.rel_path == Path("chars/enemies/sprite.png")
+    assert record_a.rel_path != record_b.rel_path
 
 
 # ---------------------------------------------------------------------------
