@@ -105,7 +105,8 @@ src/pixel_art_auto_captioner/
 class ImageRecord:
     """A single image ready for captioning."""
     path: Path              # absolute path to image file
-    stem: str               # filename without extension (unique ID)
+    stem: str               # relative-path identifier from input_root
+                            # (e.g. "folder1_sprite" instead of "sprite")
     image: Image.Image      # loaded PIL image (RGB)
     width: int              # original pixel width
     height: int             # original pixel height
@@ -114,7 +115,7 @@ class ImageRecord:
 class CaptionRecord:
     """A generated caption linked to its source image."""
     image_path: Path        # source image path
-    image_stem: str         # filename without extension
+    image_stem: str         # relative-path identifier (matches ImageRecord.stem)
     caption_text: str       # generated caption string
     model_name: str         # e.g. "joycaption-beta-one"
     prompt_template: str    # the user prompt used
@@ -322,7 +323,7 @@ Logged events:
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `load_image` | `(path: Path, target_size: tuple[int,int] \| None = None) -> ImageRecord` | Opens an image, converts to RGB, optionally resizes, returns `ImageRecord` |
+| `load_image` | `(path: Path, input_root: Path, target_size: tuple[int,int] \| None = None) -> ImageRecord` | Opens an image, converts to RGB, optionally resizes. ``stem`` is computed as the relative path from *input_root* with path separators replaced by underscores (e.g. ``"folder1_sprite"``). Raises ``ValueError`` if *path* is not under *input_root*. |
 | `validate_image` | `(path: Path) -> bool` | Returns `True` if the file can be opened as a valid image |
 
 ### 6.2 `export_utils.py`

@@ -1,0 +1,1 @@
+"""Test suite for the pixel-art-auto-captioner package."""

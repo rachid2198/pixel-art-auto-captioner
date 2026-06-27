@@ -19,13 +19,13 @@ def test_image_record_construction():
     img = Image.new("RGB", (64, 64), color="red")
     record = ImageRecord(
         path=Path("/images/sprite.png"),
-        stem="sprite",
+        stem="folder1_sprite",
         image=img,
         width=64,
         height=64,
     )
     assert record.path == Path("/images/sprite.png")
-    assert record.stem == "sprite"
+    assert record.stem == "folder1_sprite"
     assert record.image is img
     assert record.width == 64
     assert record.height == 64
@@ -36,7 +36,7 @@ def test_image_record_types():
     img = Image.new("RGB", (32, 48), color="blue")
     record = ImageRecord(
         path=Path("/a/b/c.webp"),
-        stem="c",
+        stem="sub_c",
         image=img,
         width=32,
         height=48,
@@ -66,14 +66,14 @@ def test_image_record_asdict():
     img = Image.new("RGB", (10, 10))
     record = ImageRecord(
         path=Path("/img.png"),
-        stem="img",
+        stem="root_img",
         image=img,
         width=10,
         height=10,
     )
     d = asdict(record)
     assert d["path"] == Path("/img.png")
-    assert d["stem"] == "img"
+    assert d["stem"] == "root_img"
     assert d["width"] == 10
     assert d["height"] == 10
     assert isinstance(d["image"], Image.Image)
@@ -90,7 +90,7 @@ def test_caption_record_construction():
     """All required fields accept values and retain them."""
     record = CaptionRecord(
         image_path=Path("/images/sprite.png"),
-        image_stem="sprite",
+        image_stem="folder1_sprite",
         caption_text="A red pixel art character.",
         model_name="joycaption-beta-one",
         prompt_template="Describe this pixel art image.",
@@ -101,7 +101,7 @@ def test_caption_record_construction():
         extra={"confidence": 0.95},
     )
     assert record.image_path == Path("/images/sprite.png")
-    assert record.image_stem == "sprite"
+    assert record.image_stem == "folder1_sprite"
     assert record.caption_text == "A red pixel art character."
     assert record.model_name == "joycaption-beta-one"
     assert record.prompt_template == "Describe this pixel art image."
@@ -116,7 +116,7 @@ def test_caption_record_types():
     """Every field has the expected Python type."""
     record = CaptionRecord(
         image_path=Path("/i.png"),
-        image_stem="i",
+        image_stem="sub_i",
         caption_text="test",
         model_name="m",
         prompt_template="p",
@@ -142,7 +142,7 @@ def test_caption_record_empty_extra():
     """``extra`` defaults to an empty dict when no metadata is provided."""
     record = CaptionRecord(
         image_path=Path("/i.png"),
-        image_stem="i",
+        image_stem="sub_i",
         caption_text="test",
         model_name="m",
         prompt_template="p",
@@ -159,7 +159,7 @@ def test_caption_record_extra_arbitrary_keys():
     """``extra`` dict accepts arbitrary string-keyed metadata."""
     record = CaptionRecord(
         image_path=Path("/i.png"),
-        image_stem="i",
+        image_stem="sub_i",
         caption_text="test",
         model_name="m",
         prompt_template="p",
@@ -177,7 +177,7 @@ def test_caption_record_asdict():
     """``dataclasses.asdict`` serializes all fields correctly."""
     record = CaptionRecord(
         image_path=Path("/images/sprite.png"),
-        image_stem="sprite",
+        image_stem="folder1_sprite",
         caption_text="A red pixel art character.",
         model_name="joycaption-beta-one",
         prompt_template="Describe this pixel art image.",
@@ -201,7 +201,7 @@ def test_caption_record_timestamp_iso8601():
     ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
     record = CaptionRecord(
         image_path=Path("/i.png"),
-        image_stem="i",
+        image_stem="sub_i",
         caption_text="test",
         model_name="m",
         prompt_template="p",

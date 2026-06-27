@@ -17,7 +17,10 @@ class ImageRecord:
 
     Attributes:
         path: Absolute path to the source image file on disk.
-        stem: Filename without extension, used as a unique identifier.
+        stem: Relative-path identifier from the ``input_root`` directory,
+            with path separators replaced by underscores
+            (e.g. ``"folder1_sprite"``).  Uniquely identifies the image
+            across nested source directories.
         image: The decoded image as a PIL Image in RGB mode.
         width: Original image width in pixels.
         height: Original image height in pixels.
@@ -36,7 +39,9 @@ class CaptionRecord:
 
     Attributes:
         image_path: Absolute path to the source image file.
-        image_stem: Filename without extension (matches ``ImageRecord.stem``).
+        image_stem: Relative-path identifier (matches
+            ``ImageRecord.stem``).  E.g. ``"folder1_sprite"`` instead
+            of just ``"sprite"``.
         caption_text: The generated caption string.
         model_name: Identifier for the VLM that produced the caption
             (e.g. ``"joycaption-beta-one"``).
