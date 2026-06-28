@@ -170,6 +170,42 @@ This clause creates a self-improving feedback loop: every step that costs time l
 - Every public function in every module must have at least one test.
 - Tests must cover both success and error paths where feasible.
 
+### 7.5 Known Pitfalls (from Iterative Workflow Improvements)
+
+These guardrails are harvested from real friction encountered during
+implementation.  They exist to prevent the same debugging cost from
+recurring in future steps or by future agents.
+
+#### PIL ``verify()`` handle lifetime (from Step 2)
+``PIL.Image.verify()`` **closes the underlying file handle** after
+reading the image header.  The result of ``verify()`` cannot be reused
+for pixel access.  ``validate_image()`` and ``load_image()`` **must
+remain separate functions** with separate ``Image.open()`` calls.
+Never refactor them into a single code path that calls both
+``verify()`` and pixel operations on the same handle.
+
+#### Source-dir boundary tests with ``tmp_path`` (from Step 3)
+When testing that a path is rejected for falling outside configured
+source directories, create **explicit sibling directories** under
+``tmp_path`` rather than nesting the out-of-bounds file inside the
+source tree:
+
+```python
+# Correct: sibling directories
+source_dir = tmp_path / "source"
+source_dir.mkdir()
+outside_dir = tmp_path / "outside"  # NOT a child of source_dir
+outside_dir.mkdir()
+
+# Wrong: orphan nested inside source tree
+# source_dir = tmp_path
+# orphan = tmp_path / "orphan.png"  # still under source_dir!
+```
+
+Nesting the orphan inside the source directory produces a **false
+negative** — the path unintentionally resolves under a source dir
+and the expected ``ValueError`` never fires.
+
 ---
 
 ## 8. Package Boundaries (Do Not Cross)

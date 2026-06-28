@@ -327,7 +327,7 @@ Logged events:
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `load_image` | `(path: Path, input_root: Path, target_size: tuple[int,int] \| None = None) -> ImageRecord` | Opens an image, converts to RGB, optionally resizes. ``stem`` is the bare filename without extension; ``rel_path`` captures the path relative to *input_root* for directory-preserving output. Raises ``ValueError`` if *path* is not under *input_root*. |
-| `validate_image` | `(path: Path) -> bool` | Returns `True` if the file can be opened as a valid image |
+| `validate_image` | `(path: Path) -> bool` | Returns `True` if the file can be opened as a valid image. **⚠️ Uses ``PIL.Image.verify()`` which closes the underlying file handle** — the verified handle is not reusable for pixel access. ``load_image()`` uses a separate ``Image.open()`` call; keep these two code paths separate. |
 
 ### 6.2 `export_utils.py`
 
@@ -514,6 +514,15 @@ tests/
 - `test_load_resize` — resizes when target_size is set.
 - `test_skip_existing` — skips images with existing output files.
 - `test_len` — returns correct count.
+
+> **⚠️ Source-dir boundary testing pattern:** When testing that a path is rejected because it falls outside configured source directories, do **not** nest the out-of-bounds file inside a source directory tree. Create explicit sibling directories under ``tmp_path`` instead:
+>
+> ```python
+> source_dir = tmp_path / "source"
+> outside_dir = tmp_path / "outside"   # sibling, not child of source_dir
+> ```
+>
+> Nesting the orphan inside the source directory (e.g. ``tmp_path / "source" / "orphan.png"`` while also using ``tmp_path / "source"`` as a source dir) produces a false negative — the path unintentionally resolves under a source dir and the expected ``ValueError`` never fires.
 
 **`test_model.py`:**
 - `test_model_load_nf4` — loads without error (requires GPU).
