@@ -14,7 +14,7 @@ import logging
 from pathlib import Path
 from typing import Iterator, Optional
 
-from pixel_art_auto_captioner.common.image_utils import load_image
+from pixel_art_auto_captioner.common.image_utils import load_image, validate_image
 from pixel_art_auto_captioner.common.types import ImageRecord
 
 logger = logging.getLogger(__name__)
@@ -39,13 +39,26 @@ class ImageDataLoader:
         # -- validate required key ----------------------------------------
         if "source_dirs" not in config or not config["source_dirs"]:
             raise ValueError("config must contain a non-empty 'source_dirs' list")
+        if not isinstance(config["source_dirs"], list):
+            raise ValueError(
+                f"'source_dirs' must be a list of strings, got {type(config['source_dirs']).__name__}"
+            )
 
-        self.source_dirs: list[Path] = [
-            Path(d).resolve() for d in config["source_dirs"]
-        ]
-        self.extensions: list[str] = config.get(
-            "extensions", DEFAULT_EXTENSIONS
-        )
+        source_dirs_raw = config["source_dirs"]
+        for i, d in enumerate(source_dirs_raw):
+            if not isinstance(d, str):
+                raise ValueError(
+                    f"source_dirs[{i}] must be a string, got {type(d).__name__}: {d!r}"
+                )
+
+        self.source_dirs: list[Path] = [Path(d).resolve() for d in source_dirs_raw]
+
+        raw_extensions = config.get("extensions", DEFAULT_EXTENSIONS)
+        if not isinstance(raw_extensions, list):
+            raise ValueError(
+                f"'extensions' must be a list of strings, got {type(raw_extensions).__name__}"
+            )
+        self.extensions: list[str] = raw_extensions
         self.recursive: bool = config.get("recursive", True)
         self.max_images: Optional[int] = config.get("max_images", None)
         self.skip_existing: bool = config.get("skip_existing", True)
@@ -173,19 +186,31 @@ class ImageDataLoader:
         return None
 
     def _get_filtered_paths(self) -> list[Path]:
-        """Return discovered paths after ``skip_existing`` filtering.
+        """Return discovered paths after validation and ``skip_existing`` filtering.
 
         Result is cached so ``__len__`` and ``__iter__`` agree without
         re-scanning the filesystem.
+
+        Images that fail :func:`validate_image` are excluded here so
+        that ``__len__`` and ``__iter__`` agree — corrupt files are never
+        counted as processable images.
         """
         if self._filtered is None:
             discovered = self.discover()
 
+            # -- validate images (Critique 1 fix) -------------------------
+            valid: list[Path] = []
+            for p in discovered:
+                if validate_image(p):
+                    valid.append(p)
+                else:
+                    logger.warning("Corrupt or unreadable image, excluding: %s", p)
+
             if not self.skip_existing or self.output_dir is None:
-                self._filtered = discovered
+                self._filtered = valid
             else:
                 filtered: list[Path] = []
-                for p in discovered:
+                for p in valid:
                     source = self._find_source_dir(p)
                     if source is None:
                         # Shouldn't happen — every discovered path

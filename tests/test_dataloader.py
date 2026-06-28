@@ -19,6 +19,11 @@ def _write_png(path: Path, size: tuple[int, int] = (64, 64)) -> None:
     img.save(path)
 
 
+def _write_corrupt_file(path: Path) -> None:
+    """Write a file with a .png extension but invalid image content."""
+    path.write_text("this is not a valid png file")
+
+
 def _make_config(source_dirs: list[Path], **overrides) -> dict:
     """Return a minimal valid config dict with overrides applied."""
     cfg: dict = {"source_dirs": [str(d) for d in source_dirs]}
@@ -136,20 +141,36 @@ class TestDiscover:
         assert len(paths) == 1
 
     def test_deduplicates_overlapping_source_dirs(self, tmp_path: Path):
-        """Same file discovered from two overlapping source dirs is
-        counted only once."""
+        """Same resolved file discovered from two source dirs pointing
+        to the same physical directory is counted only once."""
+        _write_png(tmp_path / "img.png")
+
+        # Two source dirs that resolve to the same physical location
+        # produce the same resolved path for img.png.
+        loader = ImageDataLoader(
+            _make_config([tmp_path, tmp_path], recursive=False)
+        )
+        paths = loader.discover()
+
+        assert len(paths) == 1, (
+            f"Expected 1 unique path after dedup, got {len(paths)}: {paths}"
+        )
+        assert paths[0].stem == "img"
+
+    def test_distinct_files_with_same_name_are_not_deduped(self, tmp_path: Path):
+        """Two files with the same stem in different subdirectories are
+        treated as separate images, not deduplicated."""
         _write_png(tmp_path / "img.png")
         sub = tmp_path / "sub"
         sub.mkdir()
         _write_png(sub / "img.png")
 
-        # Both source dirs include the same image (same resolved path).
         loader = ImageDataLoader(
             _make_config([tmp_path, sub], recursive=False)
         )
         paths = loader.discover()
 
-        assert len(paths) == 2  # two unique files
+        assert len(paths) == 2
         stems = {p.stem for p in paths}
         assert stems == {"img"}
 
@@ -334,6 +355,78 @@ class TestIteration:
         records = list(loader)
         assert len(records) == 1
 
+    def test_skip_existing_preserves_directory_structure(self, tmp_path: Path):
+        """Nested-directory skip_existing uses directory-preserving
+        sidecar paths (output_dir / rel_path.with_suffix('.txt'))."""
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        _write_png(tmp_path / "top.png")
+        _write_png(sub / "nested.png")
+
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        # Pre-create sidecar at the nested output path
+        nested_output = output_dir / "sub" / "nested.txt"
+        nested_output.parent.mkdir(parents=True)
+        nested_output.write_text("pre-existing caption")
+
+        loader = ImageDataLoader(
+            _make_config(
+                [tmp_path],
+                recursive=True,
+                skip_existing=True,
+                output_dir=str(output_dir),
+            )
+        )
+
+        records = list(loader)
+
+        assert len(records) == 1
+        assert records[0].stem == "top"
+
+    def test_skip_existing_flat_sidecar_wrong_location(self, tmp_path: Path):
+        """A flat sidecar at output_dir/nested.txt does NOT match
+        an image at sub/nested.png — the sidecar must be at the correct
+        directory-preserving path to trigger a skip."""
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        _write_png(sub / "nested.png")
+
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        # Put sidecar at the WRONG (flat) location
+        (output_dir / "nested.txt").write_text("flat sidecar — wrong path")
+
+        loader = ImageDataLoader(
+            _make_config(
+                [tmp_path],
+                recursive=True,
+                skip_existing=True,
+                output_dir=str(output_dir),
+            )
+        )
+
+        records = list(loader)
+
+        # The flat sidecar should NOT match the nested image.
+        assert len(records) == 1
+        assert records[0].stem == "nested"
+
+    def test_corrupt_image_excluded_from_len_and_iter(self, tmp_path: Path):
+        """Corrupt images are excluded during filtering so __len__
+        and __iter__ agree (Critique 1 fix)."""
+        _write_png(tmp_path / "good.png")
+        _write_corrupt_file(tmp_path / "bad.png")
+
+        loader = ImageDataLoader(
+            _make_config([tmp_path], recursive=False)
+        )
+
+        assert len(loader) == 1
+        records = list(loader)
+        assert len(records) == 1
+        assert records[0].stem == "good"
+
 
 # ---------------------------------------------------------------------------
 # Config validation
@@ -349,3 +442,21 @@ class TestConfigValidation:
         """__init__ raises ValueError when source_dirs is empty."""
         with pytest.raises(ValueError, match="source_dirs"):
             ImageDataLoader({"source_dirs": []})
+
+    def test_source_dirs_string_raises(self):
+        """Passing a plain string as source_dirs raises ValueError
+        instead of iterating characters (Critique 3 fix)."""
+        with pytest.raises(ValueError, match="must be a list"):
+            ImageDataLoader({"source_dirs": "/some/path"})
+
+    def test_source_dirs_elements_must_be_strings(self):
+        """Each element of source_dirs must be a string."""
+        with pytest.raises(ValueError, match="must be a string"):
+            ImageDataLoader({"source_dirs": ["/valid", 123]})
+
+    def test_extensions_must_be_list(self):
+        """extensions must be a list, not a string."""
+        with pytest.raises(ValueError, match="must be a list"):
+            ImageDataLoader(
+                {"source_dirs": ["/tmp"], "extensions": ".png"}
+            )
