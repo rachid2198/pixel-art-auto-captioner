@@ -10,7 +10,7 @@
 |------|--------|------|-----------|:---:|:---:|--------------|
 | 1 | `[x]` Complete | `common/types.py` | `test_types.py` | No | `qwen/qwen3-coder:free` | 10 passed, 0 failed |
 | 2 | `[x]` Complete | `common/image_utils.py` | `test_image_utils.py` | No | `openrouter/deepseek/deepseek-v4-flash` | 17 passed, 0 failed |
-| 3 | `[ ]` Pending | `ingestion/dataloader.py` | `test_dataloader.py` | No | `openrouter/deepseek/deepseek-v4-flash` | — |
+| 3 | `[x]` Complete | `ingestion/dataloader.py` | `test_dataloader.py` | No | `openrouter/deepseek/deepseek-v4-flash` | 22 passed, 0 failed |
 | 4 | `[ ]` Pending | `common/export_utils.py` | `test_export_utils.py` | No | `openrouter/deepseek/deepseek-v4-flash` | — |
 | 5 | `[ ]` Pending | `captioning/base.py` | (via step 6) | No | `qwen/qwen3-coder:free` | — |
 | 6 | `[ ]` Pending | `captioning/joycaption.py` | `test_model.py` | Yes | `openrouter/deepseek/deepseek-v4-pro` | — |
@@ -32,7 +32,21 @@
 
   Next targeted file: `ingestion/dataloader.py`.
 
-- **2026-06-27 — Fix: Output path strategy changed to directory-preserving.**
+- **2026-06-27 — Step 3 complete:** `ingestion/dataloader.py` (`ImageDataLoader`). Tests: 22 passed, 0 failed. Files created/modified: `src/pixel_art_auto_captioner/ingestion/dataloader.py`, `tests/test_dataloader.py`, `src/pixel_art_auto_captioner/ingestion/__init__.py` (added export). All 8 SPEC §10.3 required tests implemented plus 14 additional edge-case tests covering config validation, deduplication, sorting, empty/nonexistent directories, max_images=None, resize=None, skip_existing disabled, and len-after-filtering.
+
+  **Friction & Streamlining Note:**
+  - **Friction:** The `test_raises_on_path_outside_source_dirs` test initially created the "orphan" image at `tmp_path/other/orphan.png` while using `tmp_path` itself as the sole source_dir. Since `other/` is a child of `tmp_path`, the path resolved *under* the source directory — the `load()` call succeeded instead of raising `ValueError`. The root cause was a single `tmp_path` serving double duty as both the source root and the test-scratch root, making the intended boundary invisible.
+  - **Streamlining guardrail:** When writing tests that validate source-dir boundary enforcement, always create **explicit sibling directories** — one for the source and a separate one for the out-of-bounds file — rather than nesting the orphan inside what happens to be the source parent. A comment in `test_dataloader.py` or a short note in SPEC §10.3 calling out this pattern would prevent the same mental slip for future agents.
+
+  Next targeted file: `common/export_utils.py`.
+
+- **2026-06-27 — Harness update: Friction & Streamlining guardrails applied.**
+  Both guardrails from Steps 2 and 3 have been baked into the project harness:
+  - **SPEC.md §6.1** — ``validate_image`` row now warns that ``PIL.Image.verify()`` closes the file handle and that the two code paths must remain separate.
+  - **SPEC.md §10.3** — ``test_dataloader.py`` section now includes a blockquote with the sibling-directory pattern for source-dir boundary tests, with a concrete ``source_dir`` / ``outside_dir`` code example.
+  - **AGENTS.md §7.5** — New "Known Pitfalls" subsection added under Testing Requirements, documenting both the PIL verify() handle lifetime issue and the tmp_path sibling-directory pattern with correct/incorrect examples.
+
+  Next targeted file: `common/export_utils.py` (Step 4, unchanged).
   Reverted the flattened-stem approach. ``ImageRecord.stem`` is now the
   bare filename (e.g. ``"sprite"``), and a new ``rel_path`` field captures
   the full relative path from ``input_root`` (e.g. ``Path("folder1/sprite.png")``).
