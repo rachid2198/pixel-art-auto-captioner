@@ -8,6 +8,7 @@ exercised on CPU.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import PIL.Image
@@ -173,6 +174,101 @@ class TestCaptionRunnerConfig:
                 mock_model,
                 {"output_dir": "/tmp", "prompt_template": ""},
             )
+
+    # -- Critique 4: output_formats validation --------------------------------
+
+    def test_output_formats_empty_list_raises(self, dataloader, mock_model, output_dir):
+        """Runner raises ValueError when output_formats is an empty list."""
+        from pixel_art_auto_captioner.batch.runner import CaptionRunner
+
+        with pytest.raises(ValueError, match="output_formats"):
+            CaptionRunner(
+                dataloader,
+                mock_model,
+                {
+                    "output_dir": str(output_dir),
+                    "prompt_template": "Test.",
+                    "output_formats": [],
+                },
+            )
+
+    def test_output_formats_invalid_value_raises(self, dataloader, mock_model, output_dir):
+        """Runner raises ValueError when output_formats contains an invalid value."""
+        from pixel_art_auto_captioner.batch.runner import CaptionRunner
+
+        with pytest.raises(ValueError, match="Unsupported output format"):
+            CaptionRunner(
+                dataloader,
+                mock_model,
+                {
+                    "output_dir": str(output_dir),
+                    "prompt_template": "Test.",
+                    "output_formats": ["txt", "yaml"],
+                },
+            )
+
+    # -- Critique 3: resume consistency warning -------------------------------
+
+    def test_resume_true_warns_on_skip_existing_false(
+        self, temp_image_dir, tmp_path, output_dir, caplog
+    ):
+        """Runner logs a warning when resume=True but dataloader.skip_existing=False."""
+        from pixel_art_auto_captioner.batch.runner import CaptionRunner
+
+        dl_cfg = {
+            "source_dirs": [str(temp_image_dir)],
+            "extensions": [".png"],
+            "recursive": True,
+            "max_images": None,
+            "skip_existing": False,
+            "output_dir": str(tmp_path / "output"),
+            "image_size": None,
+        }
+        dl = ImageDataLoader(dl_cfg)
+
+        with caplog.at_level(logging.WARNING):
+            CaptionRunner(
+                dl,
+                MockCaptionModel(),
+                {
+                    "output_dir": str(output_dir),
+                    "prompt_template": "Test.",
+                    "resume": True,
+                },
+            )
+
+        assert "resume=True" in caplog.text
+        assert "skip_existing=False" in caplog.text
+
+    def test_resume_true_no_warning_when_skip_existing_true(
+        self, temp_image_dir, tmp_path, output_dir, caplog
+    ):
+        """No warning when resume=True and dataloader.skip_existing=True."""
+        from pixel_art_auto_captioner.batch.runner import CaptionRunner
+
+        dl_cfg = {
+            "source_dirs": [str(temp_image_dir)],
+            "extensions": [".png"],
+            "recursive": True,
+            "max_images": None,
+            "skip_existing": True,
+            "output_dir": str(tmp_path / "output"),
+            "image_size": None,
+        }
+        dl = ImageDataLoader(dl_cfg)
+
+        with caplog.at_level(logging.WARNING):
+            CaptionRunner(
+                dl,
+                MockCaptionModel(),
+                {
+                    "output_dir": str(output_dir),
+                    "prompt_template": "Test.",
+                    "resume": True,
+                },
+            )
+
+        assert "resume=True" not in caplog.text
 
     def test_default_output_formats(self, dataloader, mock_model, output_dir):
         """output_formats defaults to ['txt', 'jsonl'] when not specified."""
@@ -373,10 +469,12 @@ class TestCaptionRunnerIntegration:
         # unload must have been called despite the failures
         assert runner._model.unload_called is True
 
-    def test_runner_handles_model_load_failure(
+    # -- Critique 1 & 2: model.load() failure must propagate (not swallow) --
+
+    def test_runner_model_load_failure_propagates(
         self, dataloader, output_dir
     ):
-        """Runner returns zeroed summary if model.load() raises."""
+        """model.load() failure propagates exception (fail-fast, SPEC §12.1)."""
         from pixel_art_auto_captioner.batch.runner import CaptionRunner
 
         class LoadFailingModel(MockCaptionModel):
@@ -392,9 +490,77 @@ class TestCaptionRunnerIntegration:
                 "resume": False,
             },
         )
+        with pytest.raises(RuntimeError, match="OOM during load"):
+            runner.run()
+
+    def test_runner_model_load_failure_still_unloads(
+        self, dataloader, output_dir
+    ):
+        """unload() is called even when model.load() raises (partial alloc)."""
+        from pixel_art_auto_captioner.batch.runner import CaptionRunner
+
+        class PartialLoadModel(MockCaptionModel):
+            def load(self, config):
+                self.load_called = True
+                raise RuntimeError("OOM after partial alloc")
+
+        model = PartialLoadModel()
+        runner = CaptionRunner(
+            dataloader,
+            model,
+            {
+                "output_dir": str(output_dir),
+                "prompt_template": "Test.",
+                "resume": False,
+            },
+        )
+        with pytest.raises(RuntimeError):
+            runner.run()
+
+        # unload must STILL be called (Critique 2 fix)
+        assert model.unload_called is True
+
+    # -- Critique 5: iterator load-drop invariant ---------------------------
+
+    def test_runner_iterator_load_drop_tracks_failed(
+        self, temp_image_dir, output_dir
+    ):
+        """Shortfall from iterator load drops is counted as failed."""
+        from pixel_art_auto_captioner.batch.runner import CaptionRunner
+
+        # Dataloader whose iterator drops every other image
+        class DroppingDataLoader(ImageDataLoader):
+            def __iter__(self):
+                paths = self._get_filtered_paths()
+                total = len(paths)
+                for idx, p in enumerate(paths, start=1):
+                    if idx % 2 == 0:
+                        # Simulate load failure — skip without yielding
+                        continue
+                    yield self.load(p)
+
+        dl = DroppingDataLoader(
+            {
+                "source_dirs": [str(temp_image_dir)],
+                "extensions": [".png"],
+                "recursive": True,
+                "max_images": None,
+                "skip_existing": False,
+            }
+        )
+        # 3 images, iterator yields only images 1 and 3 → 1 dropped
+        runner = CaptionRunner(
+            dl,
+            MockCaptionModel(),
+            {
+                "output_dir": str(output_dir),
+                "prompt_template": "Test.",
+                "resume": False,
+            },
+        )
         summary = runner.run()
 
         assert summary["total"] == 3
-        assert summary["succeeded"] == 0
-        assert summary["failed"] == 0  # no images processed
-        assert summary["skipped"] == 0
+        assert summary["succeeded"] == 2
+        assert summary["failed"] == 1  # the dropped image
+        assert summary["succeeded"] + summary["failed"] + summary["skipped"] == summary["total"]

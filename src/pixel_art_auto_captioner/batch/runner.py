@@ -26,6 +26,7 @@ from pixel_art_auto_captioner.ingestion.dataloader import ImageDataLoader
 logger = logging.getLogger(__name__)
 
 DEFAULT_OUTPUT_FORMATS: list[str] = ["txt", "jsonl"]
+ALLOWED_OUTPUT_FORMATS: set[str] = {"txt", "jsonl"}
 
 
 class CaptionRunner:
@@ -70,7 +71,7 @@ class CaptionRunner:
 
             Raises:
                 ValueError: If ``output_dir`` or ``prompt_template`` is
-                    missing.
+                    missing, or ``output_formats`` is invalid.
         """
         # -- validate required keys ----------------------------------------
         output_dir_raw = config.get("output_dir")
@@ -87,13 +88,34 @@ class CaptionRunner:
             )
         self.prompt_template: str = prompt
 
-        self.output_formats: list[str] = config.get(
-            "output_formats", DEFAULT_OUTPUT_FORMATS
-        )
+        # -- validate output_formats (Critique 4) --------------------------
+        output_formats = config.get("output_formats", DEFAULT_OUTPUT_FORMATS)
+        if not isinstance(output_formats, list) or len(output_formats) == 0:
+            raise ValueError(
+                f"'output_formats' must be a non-empty list, "
+                f"got {output_formats!r}"
+            )
+        for fmt in output_formats:
+            if fmt not in ALLOWED_OUTPUT_FORMATS:
+                raise ValueError(
+                    f"Unsupported output format {fmt!r}. "
+                    f"Allowed: {sorted(ALLOWED_OUTPUT_FORMATS)}"
+                )
+        self.output_formats: list[str] = output_formats
+
         self.generation_params: dict[str, Any] = config.get(
             "generation_params", {}
         )
         self.resume: bool = config.get("resume", True)
+
+        # -- validate resume consistency with dataloader (Critique 3) ------
+        if self.resume and not dataloader.skip_existing:
+            logger.warning(
+                "Runner configured with resume=True, but the dataloader "
+                "has skip_existing=False — existing outputs will NOT be "
+                "skipped.  To skip existing outputs, set skip_existing=True "
+                "in the dataloader config."
+            )
 
         self._dataloader = dataloader
         self._model = model
@@ -125,8 +147,14 @@ class CaptionRunner:
                     "output_dir": str,   # where captions were saved
                 }
 
+        Raises:
+            RuntimeError: If ``model.load()`` fails (fail-fast per
+                SPEC §12.1 — model-load errors must propagate so the
+                CLI can exit with code 1).
+
         The model is **always** unloaded in a ``finally`` block, even
-        if the run is terminated by an exception.
+        if the run is terminated by an exception — including if
+        ``model.load()`` fails after partial GPU allocation.
         """
         # Count total discovered before filtering
         total_discovered = len(self._dataloader.discover())
@@ -138,18 +166,12 @@ class CaptionRunner:
         logger.info("Loading model...")
         try:
             self._model.load(self._full_config)
-        except Exception:
-            logger.exception("Model load failed — aborting run.")
-            return {
-                "total": total_discovered,
-                "succeeded": 0,
-                "failed": 0,
-                "skipped": skipped,
-                "output_dir": str(self.output_dir),
-            }
+            logger.info("Model loaded successfully.")  # Critique 6
 
-        try:
+            # -- iterate over images ---------------------------------------
+            records_received = 0
             for image_record in self._dataloader:
+                records_received += 1
                 try:
                     caption_text, gen_meta = self._model.caption(
                         image_record.image,
@@ -175,7 +197,7 @@ class CaptionRunner:
                         ),
                     )
 
-                    # -- export -------------------------------------------------
+                    # -- export ---------------------------------------------
                     if "txt" in self.output_formats:
                         save_txt_sidecar(record, self.output_dir)
                     if "jsonl" in self.output_formats:
@@ -191,7 +213,18 @@ class CaptionRunner:
                     failed += 1
                     continue
 
+            # -- detect iterator load drops (Critique 5) -------------------
+            if records_received < total_to_process:
+                load_failures = total_to_process - records_received
+                logger.warning(
+                    "Dataloader dropped %d image(s) during iteration "
+                    "(likely load-time failures).  Counting as failed.",
+                    load_failures,
+                )
+                failed += load_failures
+
         finally:
+            # -- always unload, even if load() partially allocated (Critique 2)
             logger.info("Unloading model...")
             self._model.unload()
 

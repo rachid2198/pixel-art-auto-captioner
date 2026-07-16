@@ -13,8 +13,8 @@
 | 3 | `[x]` Complete | `ingestion/dataloader.py` | `test_dataloader.py` | No | `openrouter/deepseek/deepseek-v4-flash` | 22 passed, 0 failed |
 | 4 | `[x]` Complete | `common/export_utils.py` | `test_export_utils.py` | No | `openrouter/deepseek/deepseek-v4-flash` | 19 passed, 0 failed |
 | 5 | `[x]` Complete | `captioning/base.py` | `test_base.py` | No | `qwen/qwen3-coder:free` | 8 passed, 0 failed (suite: 92/92) |
-| 6 | `[ ]` Pending | `captioning/joycaption.py` | `test_model.py` | Yes | `openrouter/deepseek/deepseek-v4-pro` | — |
-| 7 | `[ ]` Pending | `batch/runner.py` | `test_runner.py` | Yes | `openrouter/deepseek/deepseek-v4-pro` | — |
+| 6 | `[x]` Review | `captioning/joycaption.py` | `test_model.py` | Yes | `openrouter/deepseek/deepseek-v4-pro` | 11 passed, 6 skipped, 0 failed |
+| 7 | `[x]` Review | `batch/runner.py` | `test_runner.py` | Yes | `openrouter/deepseek/deepseek-v4-pro` | 13 passed, 0 failed |
 | 8 | `[ ]` Pending | `scripts/run_caption.py` | Manual | Yes | `openrouter/deepseek/deepseek-v4-flash` | — |
 | 9 | `[ ]` Pending | `configs/example_config.json` | — | No | `qwen/qwen3-coder:free` | — |
 
@@ -87,3 +87,23 @@
     §7.1 (output paths).
 
   Tests: 32 passed, 0 failed.
+
+- **2026-06-28 — Step 6 complete (Review):** `captioning/joycaption.py` (`JoyCaptionModel`). Tests: **11 passed, 6 skipped, 0 failed** (full suite: 116 passed, 6 skipped, 0 failed). Files created/modified: `src/pixel_art_auto_captioner/captioning/joycaption.py`, `tests/test_model.py`, `src/pixel_art_auto_captioner/captioning/__init__.py` (added `JoyCaptionModel` export), `tests/conftest.py` (registered `gpu` pytest marker).
+
+  CPU-safe tests (11): constructor/model_name, not-loaded state, caption() raises RuntimeError before load, unload() is safe no-op on fresh model, config validation (missing/empty model_path, bad torch_dtype, bad quantization), default generation params match SPEC §3.2, `_apply_vision_tower_fix` silently skips non-LLaVA objects.  GPU-gated tests (6, all skipped): NF4 load, no-quant load, caption returns tuple, non-empty caption, unload frees memory, gen_kwargs forwarding.  GPU tests use dual skip guards: `requires_gpu` (CUDA check) + `requires_model` (checks for `config.json` at `JOYCAPTION_MODEL_PATH` or `./Models`).
+
+  **Friction & Streamlining Note:**
+  - **Friction:** The two GPU load tests (`test_model_load_nf4`, `test_model_load_no_quant`) created their own model instances bypassing the `loaded_model` fixture's built-in `pytest.skip`, so they **failed** instead of skipping when `./Models` didn't exist. The root cause was that `requires_gpu` only checks CUDA availability, not model-weight availability on disk. A `requires_model` skip guard was needed as a second layer.
+  - **Streamlining guardrail:** GPU-gated tests that call `model.load()` should always use both a CUDA-availability guard AND a model-weights-on-disk guard. The pattern is a module-level helper (`_model_path() -> Optional[str]`) that checks for `config.json` in the model directory, combined with a `requires_model = pytest.mark.skipif(...)` decorator. This prevents false failures on CI/CPU machines where CUDA may coincidentally be available (e.g. CI runners with GPUs but no model cache) or the model directory may be stale.
+
+  Next targeted file: `batch/runner.py` (Step 7).
+
+- **2026-06-28 — Step 7 complete (Review):** `batch/runner.py` (`CaptionRunner`). Tests: **13 passed, 0 failed** (full suite: 116 passed, 6 skipped, 0 failed). Files created/modified: `src/pixel_art_auto_captioner/batch/runner.py`, `tests/test_runner.py`, `src/pixel_art_auto_captioner/batch/__init__.py` (added `CaptionRunner` export).
+
+  Config validation tests (7): missing/empty output_dir, missing/empty prompt_template, default output_formats, default resume=True, default generation_params={}.  Integration tests (6): full end-to-end with `MockCaptionModel` (txt + jsonl output, model lifecycle, caption call count), summary counts (total = succeeded + failed + skipped), resume (second run skips all), output_formats filtering (txt-only suppresses jsonl), model.unload() guarantee after caption() failures, model.load() failure returns zeroed summary.
+
+  **Friction & Streamlining Note:**
+  - **Friction:** Deciding how `skipped` count should be computed required careful thought. The dataloader's `__len__` returns count *after* `skip_existing` filtering, but the runner's summary `total` should report images discovered *before* filtering (per spec: "images discovered"). The solution was to call `dataloader.discover()` to get raw count, subtract `len(dataloader)` (filtered count) to compute `skipped`, then track `succeeded`/`failed` during iteration. This three-way split was not spelled out in SPEC §5.1.
+  - **Streamlining guardrail:** SPEC §5.1's summary dict documentation should explicitly define how each count is derived: `total = len(dataloader.discover())`, `skipped = total - len(dataloader)`, `succeeded`/`failed` from per-item tracking. Without this, future agents (or a fresh version of yourself) will waste time reverse-engineering the counting semantics from the dataloader internals.
+
+  Next targeted file: `scripts/run_caption.py` (Step 8).
