@@ -3,4 +3,8 @@
 Depends on: pixel_art_auto_captioner.common
 """
 
-__all__: list[str] = []
+from pixel_art_auto_captioner.captioning.base import CaptionModel
+
+__all__: list[str] = [
+    "CaptionModel",
+]

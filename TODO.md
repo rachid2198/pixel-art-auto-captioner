@@ -12,7 +12,7 @@
 | 2 | `[x]` Complete | `common/image_utils.py` | `test_image_utils.py` | No | `openrouter/deepseek/deepseek-v4-flash` | 17 passed, 0 failed |
 | 3 | `[x]` Complete | `ingestion/dataloader.py` | `test_dataloader.py` | No | `openrouter/deepseek/deepseek-v4-flash` | 22 passed, 0 failed |
 | 4 | `[x]` Complete | `common/export_utils.py` | `test_export_utils.py` | No | `openrouter/deepseek/deepseek-v4-flash` | 19 passed, 0 failed |
-| 5 | `[ ]` Pending | `captioning/base.py` | (via step 6) | No | `qwen/qwen3-coder:free` | — |
+| 5 | `[x]` Complete | `captioning/base.py` | `test_base.py` | No | `qwen/qwen3-coder:free` | 8 passed, 0 failed (suite: 92/92) |
 | 6 | `[ ]` Pending | `captioning/joycaption.py` | `test_model.py` | Yes | `openrouter/deepseek/deepseek-v4-pro` | — |
 | 7 | `[ ]` Pending | `batch/runner.py` | `test_runner.py` | Yes | `openrouter/deepseek/deepseek-v4-pro` | — |
 | 8 | `[ ]` Pending | `scripts/run_caption.py` | Manual | Yes | `openrouter/deepseek/deepseek-v4-flash` | — |
@@ -54,7 +54,15 @@
   - **Friction:** SPEC §6.2 lists only three functions for `export_utils.py` (`save_txt_sidecar`, `save_jsonl_entry`, `build_record`), but §7.3 assigns a fourth function (`generate_visual_deck`) to the same module with no function signature, no test specification, and no mention in the §15 implementation sequence. This creates a decision point: implement a stub now or defer. The choice was to implement the three functions per §6.2/§15 and flag the gap — `generate_visual_deck` has no typed interface, no output spec beyond "a lightweight, standalone index.html," and no tests, making it impossible to implement with the same confidence.
   - **Streamlining guardrail:** Every function in the §15 step description should have a corresponding row in its module's § function table **and** at least one test in §10.3. If `generate_visual_deck` is in-scope for v1.0, SPEC.md should add a `generate_visual_deck(something) -> Path` signature to §6.2, concrete test cases to §10.3, and explicit input/output specs to §7.3. Until then, agents should implement only what the §15 step table and § function table agree on.
 
-  Next targeted file: `captioning/base.py`.
+  Next targeted file: `captioning/base.py` (Step 5).
+
+- **2026-06-28 — Step 5 complete:** `captioning/base.py` (`CaptionModel` ABC). Tests: **8 passed, 0 failed** (full suite: 92 passed, 0 failed). Files created/modified: `src/pixel_art_auto_captioner/captioning/base.py`, `tests/test_base.py`, `src/pixel_art_auto_captioner/captioning/__init__.py` (added `CaptionModel` export). All 8 tests cover: ABC cannot be instantiated directly, concrete subclass is instantiable, missing abstract method raises `TypeError`, `model_name` attribute is accessible and persists across `load()`/`unload()`, `caption()` accepts and forwards `**gen_kwargs`, return type is `tuple[str, dict]`, and `load()`/`unload()` are callable without error.
+
+  **Friction & Streamlining Note:**
+  - **Friction:** SPEC §15 says step 5 has "(no separate tests — tested via concrete impl)" and the TODO.md ledger column said "(via step 6)", but AGENTS.md §7.4 mandates "every public function in every module must have at least one test." The ABC has no concrete logic, but it does have testable behaviour: abstract enforcement (direct instantiation is forbidden, missing methods raise `TypeError`) and interface contracts (`caption()` return shape, `model_name` persistence). The ambiguity between the two documents forced a deliberation pause — write `test_base.py` or trust the spec's deferral to step 6?
+  - **Streamlining guardrail:** SPEC §15 and AGENTS.md §7.4 must agree on the testing policy for ABC-only modules. Either (a) SPEC §15 should list a test file for every step including ABCs (even if minimal, e.g. `test_base.py` with 3–4 contract tests), or (b) AGENTS.md should explicitly exempt ABC-only steps, stating "modules containing only abstract classes with no concrete logic are tested via their concrete implementations in the next GPU step." The latter is cleaner but either choice eliminates the ambiguity.
+
+  Next targeted file: `captioning/joycaption.py` (Step 6).
   Reverted the flattened-stem approach. ``ImageRecord.stem`` is now the
   bare filename (e.g. ``"sprite"``), and a new ``rel_path`` field captures
   the full relative path from ``input_root`` (e.g. ``Path("folder1/sprite.png")``).
