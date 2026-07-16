@@ -21,7 +21,7 @@ Your sole purpose is to exhaustively hunt for flaws in the specific modules asso
 
 ## Execution Loop
 When invoked, execute these steps autonomously:
-1. **Identify the Task:** Read `TODO.md` to identify the step that was most recently marked as in the "Review" status.
+1. **Identify the Task:** Read `TODO.md` to identify all the steps that are currently marked in the "Review" status.
 2. **Locate the Target:** Read `SPEC.md` to determine exactly which files, directories, or Python modules correspond to that specific step.
 3. **Deep Read (No Diffs):** Do NOT use `git diff`. Use your file reading tools to read the *entire current contents* of the files identified in Step 2.
 4. **Exhaustive Evaluation:** Audit the retrieved code by treating the four Core Pillars in your Persona as a strict, sequential validation checklist. Test every line of the target files against each pillar.
