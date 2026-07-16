@@ -12,6 +12,11 @@ if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
 
+def pytest_configure(config):
+    """Register custom pytest markers."""
+    config.addinivalue_line("markers", "gpu: tests that require a CUDA-capable GPU")
+
+
 # ---------------------------------------------------------------------------
 # Synthetic images
 # ---------------------------------------------------------------------------

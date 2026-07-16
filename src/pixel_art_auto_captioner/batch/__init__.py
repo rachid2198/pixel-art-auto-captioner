@@ -3,4 +3,8 @@
 Depends on: pixel_art_auto_captioner.common, .ingestion, .captioning
 """
 
-__all__: list[str] = []
+from pixel_art_auto_captioner.batch.runner import CaptionRunner
+
+__all__: list[str] = [
+    "CaptionRunner",
+]
