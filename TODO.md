@@ -11,7 +11,7 @@
 | 1 | `[x]` Complete | `common/types.py` | `test_types.py` | No | `qwen/qwen3-coder:free` | 10 passed, 0 failed |
 | 2 | `[x]` Complete | `common/image_utils.py` | `test_image_utils.py` | No | `openrouter/deepseek/deepseek-v4-flash` | 17 passed, 0 failed |
 | 3 | `[x]` Complete | `ingestion/dataloader.py` | `test_dataloader.py` | No | `openrouter/deepseek/deepseek-v4-flash` | 22 passed, 0 failed |
-| 4 | `[ ]` Pending | `common/export_utils.py` | `test_export_utils.py` | No | `openrouter/deepseek/deepseek-v4-flash` | — |
+| 4 | `[x]`  | `common/export_utils.py` | `test_export_utils.py` | No | `openrouter/deepseek/deepseek-v4-flash` | 19 passed, 0 failed |
 | 5 | `[ ]` Pending | `captioning/base.py` | (via step 6) | No | `qwen/qwen3-coder:free` | — |
 | 6 | `[ ]` Pending | `captioning/joycaption.py` | `test_model.py` | Yes | `openrouter/deepseek/deepseek-v4-pro` | — |
 | 7 | `[ ]` Pending | `batch/runner.py` | `test_runner.py` | Yes | `openrouter/deepseek/deepseek-v4-pro` | — |
@@ -46,7 +46,15 @@
   - **SPEC.md §10.3** — ``test_dataloader.py`` section now includes a blockquote with the sibling-directory pattern for source-dir boundary tests, with a concrete ``source_dir`` / ``outside_dir`` code example.
   - **AGENTS.md §7.5** — New "Known Pitfalls" subsection added under Testing Requirements, documenting both the PIL verify() handle lifetime issue and the tmp_path sibling-directory pattern with correct/incorrect examples.
 
-  Next targeted file: `common/export_utils.py` (Step 4, unchanged).
+  Next targeted file: `captioning/base.py` (Step 5).
+
+- **2026-06-28 — Step 4 complete:** `common/export_utils.py` (`save_txt_sidecar`, `save_jsonl_entry`, `build_record`). Tests: **19 passed, 0 failed** (full suite: 80 passed, 0 failed). Files created/modified: `src/pixel_art_auto_captioner/common/export_utils.py`, `tests/test_export_utils.py`, `src/pixel_art_auto_captioner/common/__init__.py` (added exports), `tests/conftest.py` (added `sample_image_record` and `sample_caption_record` fixtures). All 3 SPEC §10.3 required tests implemented plus 16 additional edge-case tests covering: directory-structure preservation, parent-directory creation, overwrite idempotency, multi-entry JSONL append, schema key completeness, POSIX string serialisation, empty captions, nonempty `extra` dict, and generation-params round-trip fidelity.
+
+  **Friction & Streamlining Note:**
+  - **Friction:** SPEC §6.2 lists only three functions for `export_utils.py` (`save_txt_sidecar`, `save_jsonl_entry`, `build_record`), but §7.3 assigns a fourth function (`generate_visual_deck`) to the same module with no function signature, no test specification, and no mention in the §15 implementation sequence. This creates a decision point: implement a stub now or defer. The choice was to implement the three functions per §6.2/§15 and flag the gap — `generate_visual_deck` has no typed interface, no output spec beyond "a lightweight, standalone index.html," and no tests, making it impossible to implement with the same confidence.
+  - **Streamlining guardrail:** Every function in the §15 step description should have a corresponding row in its module's § function table **and** at least one test in §10.3. If `generate_visual_deck` is in-scope for v1.0, SPEC.md should add a `generate_visual_deck(something) -> Path` signature to §6.2, concrete test cases to §10.3, and explicit input/output specs to §7.3. Until then, agents should implement only what the §15 step table and § function table agree on.
+
+  Next targeted file: `captioning/base.py`.
   Reverted the flattened-stem approach. ``ImageRecord.stem`` is now the
   bare filename (e.g. ``"sprite"``), and a new ``rel_path`` field captures
   the full relative path from ``input_root`` (e.g. ``Path("folder1/sprite.png")``).
