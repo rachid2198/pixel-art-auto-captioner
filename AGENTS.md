@@ -206,6 +206,45 @@ Nesting the orphan inside the source directory produces a **false
 negative** — the path unintentionally resolves under a source dir
 and the expected ``ValueError`` never fires.
 
+#### Dual-guard pattern for GPU model-load tests (from Step 6)
+GPU-gated tests that call ``model.load()`` **must use two independent
+skip guards**, not just one:
+
+1. **CUDA availability guard** — ``@pytest.mark.skipif(not torch.cuda.is_available(), ...)``
+2. **Model-weights-on-disk guard** — a module-level helper that checks
+   for ``config.json`` at the model path (from env var or default),
+   combined with ``@pytest.mark.skipif(...)``.
+
+Relying on CUDA-availability alone produces a **false failure** when
+CUDA is present but model weights haven't been cached (e.g. a CI
+runner with a GPU but no model snapshot, or a developer machine with
+the wrong ``./Models`` directory).  The dual guard ensures such tests
+skip cleanly rather than raising ``ValueError``.
+
+```python
+# Module-level: check model availability once
+import os
+from pathlib import Path
+
+_MODEL_PATH = Path(os.environ.get("JOYCAPTION_MODEL_PATH", "./Models"))
+_MODEL_AVAILABLE = _MODEL_PATH.is_dir() and (_MODEL_PATH / "config.json").exists()
+
+requires_cuda = pytest.mark.skipif(
+    not torch.cuda.is_available(),
+    reason="CUDA-capable GPU required.",
+)
+requires_model = pytest.mark.skipif(
+    not _MODEL_AVAILABLE,
+    reason="JoyCaption model not found.",
+)
+
+# On each GPU load test:
+@requires_cuda
+@requires_model
+def test_model_load_nf4(self, ...):
+    ...
+```
+
 ---
 
 ## 8. Package Boundaries (Do Not Cross)

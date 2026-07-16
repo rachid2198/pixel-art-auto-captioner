@@ -301,6 +301,17 @@ Accepts a config dict:
 }
 ```
 
+**Count derivation** (field semantics are exact, not advisory):
+
+| Field | Derivation |
+|-------|------------|
+| ``total`` | ``len(dataloader.discover())`` — raw count before any filter |
+| ``skipped`` | ``total - len(dataloader)`` — images excluded by ``skip_existing`` or failed ``validate_image`` |
+| ``succeeded`` | Per-item counter incremented after successful ``caption()`` + export |
+| ``failed`` | Per-item counter incremented on ``caption()`` exception, empty caption, or export error |
+
+**Invariant:** ``total == succeeded + failed + skipped`` always holds.
+
 7. Calls `model.unload()` on completion (or in a `finally` block).
 
 ### 5.2 Logging
