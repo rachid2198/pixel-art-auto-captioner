@@ -25,6 +25,7 @@ Batch run of steps 2–13 (approved 2026-11-07). One commit per step on `origin/
 - 22:35 step 1 ✅ f5df4b7 94 passed, 45 skipped
 - 22:37 step 2 ✅ 5a8b228 265 passed, 45 skipped
 - 22:45 step 3 ✅ 8b97952 420 passed, 45 skipped
+- 22:51 step 4 ✅ c643983 470 passed, 36 skipped
 
 ---
 
@@ -38,8 +39,8 @@ Each step: code + tests → CPU suite green → update this table → report to 
 | 2 | ✅ | `common/config.py`: `DEFAULT_CONFIG`, `load_config`, `validate_config` (SPEC §9) | new | `test_config.py` | 265 passed, 45 skipped (excl. `test_model.py`, see step 1 notes) |
 | 3 | ✅ | `common/prompts.py`, `common/seeding.py`, `common/quality.py` (SPEC §5) | new | `test_prompts.py`, `test_seeding.py`, `test_quality.py` | 420 passed, 45 skipped (excl. `test_model.py`, see step 1 notes) |
 | 4 | ✅ | `common/image_utils.py` fixes: close handle, original size, broad except in `validate_image` (SPEC §4.5) | 🔁 `image_utils.py` | `test_image_utils.py` | 470 passed, 36 skipped (excl. `test_model.py`, see step 1 notes) |
-| 5 | ▶ | `ingestion/dataloader.py` rework: single `input_dir`, one cached walk, case-insensitive ext, include/exclude, hash sharding, `plan()`, threaded `iter_images()`, `LoadFailure` (SPEC §4) | 🔁 `dataloader.py` | `test_dataloader.py` | — |
-| 6 | ⬜ | `common/export_utils.py` rework: `ShardWriter`, `ResumeIndex`, txt naming + collisions, `generate_qa_page` (SPEC §8, §10.3) | 🔁 `export_utils.py` | `test_export_utils.py` | — |
+| 5 | ✅ | `ingestion/dataloader.py` rework: single `input_dir`, one cached walk, case-insensitive ext, include/exclude, hash sharding, `plan()`, threaded `iter_images()`, `LoadFailure` (SPEC §4) | 🔁 `dataloader.py` | `test_dataloader.py` | 588 passed, 42 skipped (excl. `test_model.py`, see step 1 notes) |
+| 6 | ▶ | `common/export_utils.py` rework: `ShardWriter`, `ResumeIndex`, txt naming + collisions, `generate_qa_page` (SPEC §8, §10.3) | 🔁 `export_utils.py` | `test_export_utils.py` | — |
 | 7 | ⬜ | `captioning/base.py`: `caption_batch`, `caption`, `describe`, `get_model()` with lazy imports; `captioning/__init__.py` stops importing torch (SPEC §6.1) | 🔁 `base.py` | `test_base.py` | — |
 | 8 | ⬜ | `captioning/joycaption_hf.py` (replaces `joycaption.py`): skip-modules quantization, no `out_proj` hack, per-request seeds, finish_reason (SPEC §6.2) | 🔁 `joycaption.py` | `test_joycaption_hf.py` (fakes) + `test_model_gpu.py` (gated) | — |
 | 9 | ⬜ | `captioning/joycaption_vllm.py`: pin + verify the vLLM version/API (SPEC §6.3) | new | `test_joycaption_vllm.py` (fake LLM) | — |
@@ -109,6 +110,26 @@ Dependencies: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8/9 → 10 → 11 → 12
   - `validate_image` catches `Exception` (not `BaseException`), logs at DEBUG and returns `False`.
 - **Deviations:** none.
 - **Note for step 5:** v1.0 `ImageDataLoader.load()` still passes `image_size` as `target_size`. §4.1 has no resize key and §3 says the image is not resized, so step 5 should call `load_image(path, input_dir)` without `target_size`.
+
+### Step 5 notes (2026-11-07)
+
+- **Files touched:** `src/pixel_art_auto_captioner/ingestion/dataloader.py` (rewritten per SPEC §4: `ImageDataLoader`, `discover()`, `plan()`, `iter_images()`, `Plan`; LF); `tests/test_dataloader.py` (v1.0 tests and their 9 step-5 skips replaced by 153 v1.1 tests: config defaults, every invalid value, all problems reported together; discovery: case-insensitive extensions, `.msgpack`/other files ignored and never opened (spy on `open` / `Image.open`), `as_posix()` sort, include/exclude incl. pruned folders never listed (`os.scandir` spy), **single walk** proved by counting `os.walk` / `os.scandir` calls (one walk, one listing per directory, no new calls on later `discover()`/`plan()`), no symlink following, progress and final-count logs, stem-collision WARNING; sharding: golden values, SPEC formula, Windows path = POSIX path, partition disjoint + complete for N ∈ {1, 2, 3, 7}, membership stable when files are added/removed; plan: pending types per image, already-complete, `max_images` after resume and repeated limited runs advance (B4), summary invariant per shard, `captions_by_source()`; iter_images: plan order with 0/1/4 workers, not resized + RGB, `load_image` called without `target_size`, `LoadFailure` for text/empty/truncated files and any `Exception` (B8), `KeyboardInterrupt` propagates, deterministic order with uneven decode times, exact bounded look-ahead (submit count), early `close()`/`break` joins the threads, empty plan starts no pool, `num_workers=0` decodes inline and lazily; package boundary in a subprocess). Key tests were mutation-checked: case-sensitive suffix, `max_images` before resume, no discovery cache, out-of-order yield and `prefetch + 1` each make tests fail. `tests/test_runner.py`: module-level transition skip only. `ingestion/__init__.py` unchanged (exports `ImageDataLoader`; `Plan` is imported from `ingestion.dataloader`).
+- **Transition skips:** removed the 9 step-5 skips in `test_dataloader.py` (file replaced). Added: module-level `pytestmark` in `test_runner.py` → step 10 (all 15 still-enabled tests broke because the shared fixture builds the v1.0 loader with `source_dirs`; the 4 existing per-test step-10 skips stay). Skipped now: `test_export_utils.py` 23 → step 6, `test_runner.py` 19 → step 10. **Obsolete files:** none. `test_model.py` unchanged (same 4 sandbox-only failures).
+- **Test environment:** as step 1 (Linux sandbox, Python 3.13, Pillow 12.3, torch stubbed outside the repo). 470 − 20 enabled v1.0 dataloader tests − 15 runner tests + 153 new = 588 passed, 42 skipped. Also smoke-run on Python 3.10 + Pillow (Cowork VM; pytest not installed there).
+- **Public API:** `ImageDataLoader(config: dict)`; `discover() -> list[Path]`; `plan(is_complete: Callable[[Path, str], bool], caption_types: list[str]) -> Plan`; `iter_images(plan: Plan) -> Iterator[ImageRecord | LoadFailure]`; constant `DEFAULT_EXTENSIONS`. Attributes: `input_dir` (resolved), `extensions` (lowercased frozenset), `recursive`, `include_sources`, `exclude_sources`, `shard` (tuple), `max_images`, `num_workers`, `prefetch`.
+- **`Plan` (§4.3 leaves fields open; minimal set for the runner and `--dry_run`):** `shard: tuple[int, int]`, `caption_types: list[str]`, `images_discovered`, `images_in_shard`, `images_already_complete`, `images_deferred` (ints, = the §7.3 summary fields), `items: list[tuple[Path, list[str]]]` (sorted `rel_path`, pending types in `caption_types` order); properties `images_planned`, `captions_planned`; method `captions_by_source() -> {source: {caption_type: n}}` for D7.
+- **Choices inside the spec:**
+  - Config is the flat §4.1 dict. Unknown keys are ignored (the CLI can pass `{**cfg["input"], **cfg["runtime"]}`); `shard` accepts `(i, N)`, `[i, N]` or the config-file string `"i/N"` (reuses `common.config._parse_shard`); `exclude_sources: null` = `[]`; extensions are lowercased and get a leading dot if missing; `prefetch` must be ≥ 1. All problems → one `ValueError`.
+  - Discovery: filters match exact top-level folder names, only at the top level; exclude wins over include; with `include_sources` set, files directly in `input_dir` (source `""`) are excluded; a WARNING names filter entries that are not top-level folders. `recursive=False` → only files directly in `input_dir`. Symlinked folders are not entered; a symlinked file that resolves to another path becomes a `LoadFailure` (otherwise `load_image` would return it under the target's key and resume would never mark the planned key done).
+  - Stem collisions (§8.2): detected in `discover()` per folder, stems compared case-insensitively (Windows file systems are case-insensitive), one WARNING listing up to 20 paths. The set is kept privately (`_collisions`), see the note for steps 6/10.
+  - Shard hash input is `rel_path.as_posix()` encoded as UTF-8.
+  - `plan()`: `caption_types` must be non-empty unique strings (`ValueError`); exceptions from `is_complete` propagate; one INFO line; not cached (discovery is).
+  - `iter_images()`: exactly one item per plan item, in plan order; at most `prefetch` items submitted and not yet yielded; a decode `Exception` → `LoadFailure(error="<Type>: <message>")` + one WARNING log; `BaseException` propagates; closing the generator cancels queued decodes and joins the threads (name prefix `pac-decode`). Images are not resized (`load_image(path, input_dir)`, per the step 4 note).
+- **Deviations:** none.
+- **Notes for later steps:**
+  - Steps 6/10: `save_txt(..., collision_set)` needs the collision set. §4 defines no public accessor, so the loader keeps it private; recompute it from `discover()` with the same rule (same folder, case-insensitive stem), or propose a public accessor.
+  - Step 10: zip `iter_images(plan)` with `plan.items` (one-to-one, same order) to get each image's pending types; wrap the generator in `contextlib.closing` so an interrupt joins the decode threads at once; do not log `LoadFailure`s again (the loader already does).
+  - Step 11: `--dry_run` can print the `Plan` counts and `captions_by_source()`.
 
 ---
 
