@@ -1,9 +1,14 @@
-"""Common types, image utilities, and export helpers.
+"""Common types, configuration, image utilities, and export helpers.
 
 This module has no internal dependencies — it is the leaf module
 in the dependency graph. Submodules will be added per SPEC §15.
 """
 
+from pixel_art_auto_captioner.common.config import (
+    DEFAULT_CONFIG,
+    load_config,
+    validate_config,
+)
 from pixel_art_auto_captioner.common.export_utils import (
     build_record,
     save_jsonl_entry,
@@ -30,6 +35,9 @@ __all__: list[str] = [
     "CAPTION_STATUSES",
     "CAPTION_FLAGS",
     "FINISH_REASONS",
+    "DEFAULT_CONFIG",
+    "load_config",
+    "validate_config",
     "build_record",
     "load_image",
     "save_jsonl_entry",

@@ -27,8 +27,8 @@ Each step: code + tests → CPU suite green → update this table → report to 
 | Step | Status | Work | Builds on (v1.0) | Tests | Result |
 |---|---|---|---|---|---|
 | 1 | ✅ | `common/types.py`: new `ImageRecord` fields (`source`, original size), `LoadFailure`, `CaptionRequest`, `CaptionResult`, new `CaptionRecord` (SPEC §3) | 🔁 `types.py` | `test_types.py` | 94 passed, 45 skipped (excl. `test_model.py`, see notes) |
-| 2 | ▶ | `common/config.py`: `DEFAULT_CONFIG`, `load_config`, `validate_config` (SPEC §9) | new | `test_config.py` | — |
-| 3 | ⬜ | `common/prompts.py`, `common/seeding.py`, `common/quality.py` (SPEC §5) | new | `test_prompts.py`, `test_seeding.py`, `test_quality.py` | — |
+| 2 | ✅ | `common/config.py`: `DEFAULT_CONFIG`, `load_config`, `validate_config` (SPEC §9) | new | `test_config.py` | 265 passed, 45 skipped (excl. `test_model.py`, see step 1 notes) |
+| 3 | ▶ | `common/prompts.py`, `common/seeding.py`, `common/quality.py` (SPEC §5) | new | `test_prompts.py`, `test_seeding.py`, `test_quality.py` | — |
 | 4 | ⬜ | `common/image_utils.py` fixes: close handle, original size, broad except in `validate_image` (SPEC §4.5) | 🔁 `image_utils.py` | `test_image_utils.py` | — |
 | 5 | ⬜ | `ingestion/dataloader.py` rework: single `input_dir`, one cached walk, case-insensitive ext, include/exclude, hash sharding, `plan()`, threaded `iter_images()`, `LoadFailure` (SPEC §4) | 🔁 `dataloader.py` | `test_dataloader.py` | — |
 | 6 | ⬜ | `common/export_utils.py` rework: `ShardWriter`, `ResumeIndex`, txt naming + collisions, `generate_qa_page` (SPEC §8, §10.3) | 🔁 `export_utils.py` | `test_export_utils.py` | — |
@@ -56,6 +56,22 @@ Dependencies: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8/9 → 10 → 11 → 12
 - **Test environment:** Linux sandbox, Python 3.13, pytest 9.1, Pillow 12.3, torch stubbed outside the repo. The no-torch subprocess test runs without the stub.
 - **`test_model.py` (not touched):** 7 CPU tests pass, 6 GPU/model skips. The 4 `TestJoyCaptionLoadConfigValidation` tests fail in the sandbox because `transformers` is not installed. This is pre-existing on v1.0 (the 111 baseline also excluded `test_model.py`) and unrelated to step 1, so they are not skipped. They should pass in the local `.env`; `test_model.py` is replaced in step 8.
 - **Deviations from SPEC §3:** none.
+
+### Step 2 notes (2026-11-07)
+
+- **Files touched:** new `src/pixel_art_auto_captioner/common/config.py` (`DEFAULT_CONFIG`, `load_config`, `validate_config` + private helpers); new `tests/test_config.py` (171 tests, mostly parametrized: defaults vs SPEC §9.2, merge precedence, sources resolution, file errors, every §9.3 rule failing and passing, all-problems-together, no heavy imports); `src/pixel_art_auto_captioner/common/__init__.py` (exports the three names).
+- **Transition skips:** none. **Obsolete files:** none. `test_model.py` unchanged (same 4 sandbox-only failures as step 1).
+- **Test environment:** as step 1 (Linux sandbox, torch stubbed outside the repo). 94 existing + 171 new = 265 passed, 45 skipped (all step 1 transition skips).
+- **Choices inside the spec:**
+  - Deep merge: nested objects merge key by key; lists, scalars and `null` replace. `overrides` uses the nested config shape (e.g. `{"runtime": {"shard": "1/4"}}`); the CLI (step 11) must omit flags the user did not give, because `None` is applied as an explicit `null`.
+  - `load_config` resolves the effective `prompts.sources`: inline non-null `prompts.sources` wins; otherwise the JSON object in `prompts.sources_file` (relative paths resolved against the current directory); `sources_file: null` gives `{}`. Missing config file → `FileNotFoundError`; invalid JSON or a non-object top level (config or sources file) → `ValueError`.
+  - `max_new_tokens`, `top_p`, `temperature` are checked for every defined caption type, not only the enabled ones. Booleans are rejected where ints/numbers are required. Unknown keys pass through without warning.
+  - Shard parsing is a private `_parse_shard` (steps 5/10/11 will need the `(i, N)` tuple; exposing it publicly would be an interface addition).
+- **Deviations:**
+  1. A missing `prompts.sources_file` (when `prompts.sources` is not given inline) is reported by `validate_config` as a config error. §9.3 does not list it explicitly, but the sources mapping is needed to check "every category referenced by `sources`", and silently falling back to `default_category` for every source would waste a paid run. Consequence: until step 11 creates `configs/sources.json`, a run must set `sources_file` to `null` (or give sources inline), and the default relative path only works when started from the repo root.
+  2. `top_p` and `temperature` may be `null` (= backend default, SPEC §3 `CaptionRequest.gen_params`); the §9.3 ranges apply when a value is set.
+  3. A `sources` entry without a `category` key is accepted (how it resolves is `prompts.py`'s job, step 3); an entry that is not an object is an error.
+- **Note for the user:** `DEFAULT_CONFIG` mirrors §9.2 literally, so `input.input_dir` defaults to `/data/pixel-art` and `output.output_dir` to `/data/captions` (the spec's example paths), although §4.1 calls `input_dir` required and §11.4 uses `/workspace/...`. Validation still fails if `input_dir` does not exist. Worth deciding at step 11 whether these two defaults should be `null` (spec change, needs approval).
 
 ---
 
