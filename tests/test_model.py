@@ -8,6 +8,11 @@ from __future__ import annotations
 
 import pytest
 
+# Transition skip (AGENTS.md §2): the v1.1 CaptionModel (step 7) makes
+# caption_batch abstract, so the v1.0 JoyCaptionModel can no longer be
+# instantiated. joycaption.py and this file are replaced in step 8.
+pytestmark = pytest.mark.skip(reason="v1.0 module; reworked in v1.1 step 8")
+
 
 # ---------------------------------------------------------------------------
 # Imports & helpers
