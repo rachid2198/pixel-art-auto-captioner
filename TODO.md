@@ -18,6 +18,13 @@ Legend: ✅ done · ▶ next · ⬜ pending · 🔁 done in v1.0, needs rework f
 | v1.1 implementation (steps 1–13) | ▶ In progress. Step 1 ✅ 2026-11-07 (94 passed, 45 transition-skipped). Step 2 next. |
 | GPU validation (steps 14–16) | ⬜ |
 
+### Overnight log
+
+Batch run of steps 2–13 (approved 2026-11-07). One commit per step on `origin/v1.1`. Times are local (UTC+1).
+
+- 22:35 step 1 ✅ f5df4b7 94 passed, 45 skipped
+- 22:37 step 2 ✅ 5a8b228 265 passed, 45 skipped
+
 ---
 
 ## 2. v1.1 implementation plan
@@ -28,8 +35,8 @@ Each step: code + tests → CPU suite green → update this table → report to 
 |---|---|---|---|---|---|
 | 1 | ✅ | `common/types.py`: new `ImageRecord` fields (`source`, original size), `LoadFailure`, `CaptionRequest`, `CaptionResult`, new `CaptionRecord` (SPEC §3) | 🔁 `types.py` | `test_types.py` | 94 passed, 45 skipped (excl. `test_model.py`, see notes) |
 | 2 | ✅ | `common/config.py`: `DEFAULT_CONFIG`, `load_config`, `validate_config` (SPEC §9) | new | `test_config.py` | 265 passed, 45 skipped (excl. `test_model.py`, see step 1 notes) |
-| 3 | ▶ | `common/prompts.py`, `common/seeding.py`, `common/quality.py` (SPEC §5) | new | `test_prompts.py`, `test_seeding.py`, `test_quality.py` | — |
-| 4 | ⬜ | `common/image_utils.py` fixes: close handle, original size, broad except in `validate_image` (SPEC §4.5) | 🔁 `image_utils.py` | `test_image_utils.py` | — |
+| 3 | ✅ | `common/prompts.py`, `common/seeding.py`, `common/quality.py` (SPEC §5) | new | `test_prompts.py`, `test_seeding.py`, `test_quality.py` | 420 passed, 45 skipped (excl. `test_model.py`, see step 1 notes) |
+| 4 | ▶ | `common/image_utils.py` fixes: close handle, original size, broad except in `validate_image` (SPEC §4.5) | 🔁 `image_utils.py` | `test_image_utils.py` | — |
 | 5 | ⬜ | `ingestion/dataloader.py` rework: single `input_dir`, one cached walk, case-insensitive ext, include/exclude, hash sharding, `plan()`, threaded `iter_images()`, `LoadFailure` (SPEC §4) | 🔁 `dataloader.py` | `test_dataloader.py` | — |
 | 6 | ⬜ | `common/export_utils.py` rework: `ShardWriter`, `ResumeIndex`, txt naming + collisions, `generate_qa_page` (SPEC §8, §10.3) | 🔁 `export_utils.py` | `test_export_utils.py` | — |
 | 7 | ⬜ | `captioning/base.py`: `caption_batch`, `caption`, `describe`, `get_model()` with lazy imports; `captioning/__init__.py` stops importing torch (SPEC §6.1) | 🔁 `base.py` | `test_base.py` | — |
@@ -72,6 +79,21 @@ Dependencies: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8/9 → 10 → 11 → 12
   2. `top_p` and `temperature` may be `null` (= backend default, SPEC §3 `CaptionRequest.gen_params`); the §9.3 ranges apply when a value is set.
   3. A `sources` entry without a `category` key is accepted (how it resolves is `prompts.py`'s job, step 3); an entry that is not an object is an error.
 - **Note for the user:** `DEFAULT_CONFIG` mirrors §9.2 literally, so `input.input_dir` defaults to `/data/pixel-art` and `output.output_dir` to `/data/captions` (the spec's example paths), although §4.1 calls `input_dir` required and §11.4 uses `/workspace/...`. Validation still fails if `input_dir` does not exist. Worth deciding at step 11 whether these two defaults should be `null` (spec change, needs approval).
+
+### Step 3 notes (2026-11-07)
+
+- **Files touched:** new `src/pixel_art_auto_captioner/common/prompts.py` (`render_prompt`, `resolve_source`, `prompt_config_hash`); new `common/seeding.py` (`derive_seed`); new `common/quality.py` (`check_caption`); `common/__init__.py` (exports the five names); new `tests/test_prompts.py` (86 tests: source resolution + default names, every caption type × category with the draft defaults, template mechanics, error paths, hash golden values / key order / sensitivity / cross-process stability), `tests/test_seeding.py` (17: SPEC formula, golden values, cross-process with different `PYTHONHASHSEED`, 31-bit range, Windows vs POSIX paths, sensitivity to each input), `tests/test_quality.py` (52: each flag, combinations and order, 4-gram and compression thresholds incl. boundaries, config defaults and bad values, unknown `finish_reason`). Each test file also checks that its module imports no torch/vllm.
+- **Transition skips:** none. **Obsolete files:** none. `test_model.py` unchanged (same 4 sandbox-only failures).
+- **Test environment:** as step 1 (Linux sandbox, Python 3.13, torch stubbed outside the repo). 265 existing + 155 new = 420 passed, 45 skipped (all step 1 transition skips). The three modules and test files also compile on Python 3.10 (Cowork VM), where the seed and hash golden values were reproduced; pytest is not installed there, so the suite itself was not run on 3.10.
+- **Choices inside the spec:**
+  - `resolve_source`: a `sources` entry with a missing or `null` `category` uses `default_category`; a missing or `null` `name` uses the default name; an explicit `""` name is kept. A missing/`null` `sources` mapping counts as empty. It does not check that the category exists (`validate_config` does; `render_prompt` raises). A non-object entry, a non-object `sources` or a missing `default_category` → `ValueError`.
+  - Default source name: dashes → spaces, then each word `str.capitalize()`-d (`stardew-valley` → `Stardew Valley`). Not `str.title()`, which also capitalizes after digits and apostrophes (`rpg2k` → `Rpg2K`). Runs of dashes collapse.
+  - `render_prompt`: only the category context is formatted (with `source_name`); instruction, constraints and source name are inserted verbatim, so braces in them stay literal. Missing/`null` `constraints` = `""`. Unknown caption type, missing instruction/category/template, or an unknown placeholder in a context or the template → `ValueError`.
+  - `prompt_config_hash`: canonical JSON = `sort_keys=True`, separators `(",", ":")`, `ensure_ascii=False`, UTF-8. Non-JSON values (e.g. a `Path`) → `TypeError`. Golden values are pinned in the tests.
+  - `check_caption(result, cfg)`: `cfg` is the `quality` section; missing keys use the §5.3 defaults, invalid values (`repeat_ngram_threshold` not an int ≥ 1, `min_compression_ratio` not a finite number ≥ 0) → `ValueError`. Every rule is evaluated independently (an errored empty result gives `["error", "empty"]`); flags come in the fixed order `error, empty, truncated, repetitive`. Words = whitespace tokens of the lowercased stripped text, punctuation attached; 4-grams over overlapping windows. Compression ratio = `len(zlib.compress(utf8)) / len(utf8)` at zlib's default level, strict `<`. The repetition rules are skipped for empty text. An unknown `finish_reason` sets no flag but logs a WARNING (backend mapping bug).
+  - No status helper: §5.3 defines the status rule (`error`/`empty` → `failed`, other flags → `flagged`, none → `ok`) and the retry rule (`attempt <= max_retries`) but no function, so both stay in the runner (step 10) rather than adding a public name.
+- **Deviations:**
+  1. **`prompt_config` shape (interpretation, please confirm).** §5.1 builds the prompt from `caption_types`, `categories` and `sources` and indexes `prompt_config["template"]`, but in §9.2 `caption_types` lives under `generation`, not `prompts`. All three functions therefore take the `prompts` section plus one extra top-level key `caption_types` (= `generation.caption_types`). The runner (step 10) builds it as `{**cfg["prompts"], "caption_types": cfg["generation"]["caption_types"]}`. Consequence: `prompt_config_hash` also changes when a caption type's generation params (e.g. `temperature`), `system` or `sources_file` change, not only the prompt wording.
 
 ---
 
