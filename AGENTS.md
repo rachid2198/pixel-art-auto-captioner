@@ -1,324 +1,169 @@
-# AGENTS.md — Operational Guardrails for Pi
+# AGENTS.md — Working Rules for Implementation Agents
 
-**Project:** Pixel Art Auto-Captioner  
-**Specification:** `SPEC.md` (version 1.0, finalized 2026-06-16)  
-**Role:** Implementation Agent operating under strict constraints
-
----
-
-## 0. Authority
-
-You are an **implementation agent** executing the architecture defined in `SPEC.md`. You do not change the architecture. You do not invent new modules, data types, interfaces, or output formats. If you find a gap, ambiguity, or conflict in the spec, **stop and flag it** — do not resolve it unilaterally.
-
-`SPEC.md` is the single source of truth for:
-- Module boundaries and responsibilities
-- Data types and their fields
-- Function signatures and return types
-- Configuration schema
-- Output formats
-- Error handling semantics
-- Implementation sequence
+**Project:** Pixel Art Auto-Captioner
+**Specification:** `SPEC.md` v1.1 (2026-11-06)
+**Progress ledger:** `TODO.md`
+**Applies to:** any coding agent working on this repo (currently Claude; previously Pi/DeepSeek/Qwen).
 
 ---
 
-## 1. What You Are Allowed To Do
+## 0. Authority & change control
 
-| Action | Rule |
-|--------|------|
-| Create files under `src/pixel_art_auto_captioner/` | Only the modules listed in SPEC `§13` |
-| Create files under `tests/` | One test file per module, per SPEC `§10.2` |
-| Create `scripts/run_caption.py` | Thin CLI entry point per SPEC `§9.1` |
-| Create `configs/example_config.json` | Example config per SPEC `§8.2` |
-| Modify `requirements.txt` | Add `pytest`, remove `torchaudio` per SPEC `§14` |
-| Run Python from the project virtual environment | Use `./.env/Scripts/python.exe` |
-| Create `.pi/skills/pixel-art-captioning-project/SKILL.md` | Project skill prompt |
-| Modify `TODO.md` | State ledger — mark steps complete, record test results |
+1. `SPEC.md` is the source of truth for architecture, interfaces, config, output formats and error semantics.
+2. **The user approves every change to the spec.** An agent may:
+   - **Implement** what the spec says.
+   - **Choose** internal details the spec leaves open (private helpers, variable names, log wording), as long as they stay inside the spec.
+   - **Propose** anything else (new features, different models, new dependencies, interface changes): write it to `TODO.md → Proposals` with motivation, cost and alternatives, then ask the user, **one proposal at a time**. Do not implement a proposal until the user accepts it. When accepted, update `SPEC.md` first, then the code.
+3. If the spec is ambiguous or wrong, stop and ask. Record the question in `TODO.md → Open questions`.
+4. Small deviations forced by reality (e.g. a library API differs from the spec) are allowed if they keep the spec's intent. Record each one in the step's TODO entry under **Deviations** and tell the user.
 
 ---
 
-## 2. What You Are NOT Allowed To Do
+## 1. Working on the user's computer
 
-| Prohibition | Rationale |
-|-------------|-----------|
-| **Modify `main.py`** | Reference prototype, preserved verbatim (SPEC `§1.2`) |
-| **Add new modules outside `src/pixel_art_auto_captioner/`** | No code outside the package (SPEC `§13`) |
-| **Add new public data types** | `ImageRecord` and `CaptionRecord` are the only data types (SPEC `§2.3`) |
-| **Change function signatures from the spec** | Spec defines the exact signatures (SPEC `§3-6`) |
-| **Change the default prompt text** | Must match `main.py` exactly (SPEC `§8.3`) |
-| **Add multi-GPU support** | Out of scope for v1.0 (SPEC `§1.3`) |
-| **Add support for VLMs other than JoyCaption** | Out of scope (SPEC `§1.3`) |
-| **Use `print()` instead of `logging`** | SPEC `§12.2` |
-| **Hard-code local paths** | Use config/CLI, not hard-coded paths (SPEC `§11.4`) |
-| **Add new dependencies without justification** | SPEC `§14` is definitive |
-| **Delete or move existing `main.py` or `.pi/` files** | Preserve existing project state |
-| **Skip tests** | Every module must have tests (SPEC `§10`) |
-| **Merge multiple implementation steps into one commit** | Execute steps sequentially per SPEC `§15` |
-| **Write code for step N without `TODO.md` confirmation** | State Ledger Rule — see Section 4 |
+The repo and dataset live on the user's Windows machine (`F:\Research\Code\pixel-art-auto-captioner`, `F:\Work\datasets\pixel-art`). When an agent operates there:
+
+- **Narrate every step** as it happens (what you are about to read, run or write, and why).
+- **Change only what the current step needs.** Never modify, move or delete anything else: no dataset files, `main.py`, `.env/`, `Models/`, `input/` or `output/`.
+- **The dataset is read-only.** No pipeline step writes inside `input_dir`.
+- **Ask before any new access** (new folders, installing packages, network, credentials).
+- **Git:** do not commit, branch, push or rewrite history unless the user asks. When asked, use the branch `v1.1` and one commit per TODO step.
+- Large scans of the dataset (≥ 280k images + ~1M msgpack files) are slow. Use bounded commands (`timeout`, `head`, per-folder sampling) and say so.
 
 ---
 
-## 3. Implementation Sequence (Mandatory Order)
+## 2. Per-step protocol
 
-Follow SPEC `§15` exactly. One step at a time. Do not proceed to step N+1 until step N is complete and tested.
+1. **Read `TODO.md`.** Work only on the step marked ▶ *next*, and only after all prerequisite steps are ✅. If prior results are missing, ask.
+2. **Re-read the relevant `SPEC.md` sections** before writing code.
+3. **Implement the module and its tests together.** Tests must cover the success paths, the error paths and every item listed for that module in SPEC §13.
+4. **Run the CPU suite.** It must be green with no `torch`, `transformers` or `vllm` installed (use the Linux sandbox or the local `.env`).
+5. **Update `TODO.md`:** status, test counts (`N passed, M skipped`), files touched, any **Deviations**, and the next step.
+6. **Report to the user in 3–6 lines** (what changed, test result, anything needing a decision) and wait for the go-ahead before the next step, unless the user has approved a batch of steps.
 
-| Step | File to write | Test file | GPU Required? | Target Engine |
-|------|---------------|-----------|:---:|:---:|
-| 1 | `common/types.py` | `test_types.py` | No | `qwen/qwen3-coder:free` |
-| 2 | `common/image_utils.py` | `test_image_utils.py` | No | `openrouter/deepseek/deepseek-v4-flash` |
-| 3 | `ingestion/dataloader.py` | `test_dataloader.py` | No | `openrouter/deepseek/deepseek-v4-flash` |
-| 4 | `common/export_utils.py` | `test_export_utils.py` | No | `openrouter/deepseek/deepseek-v4-flash` |
-| 5 | `captioning/base.py` | (via step 6) | No | `qwen/qwen3-coder:free` |
-| 6 | `captioning/joycaption.py` | `test_model.py` | Yes | `openrouter/deepseek/deepseek-v4-pro` |
-| 7 | `batch/runner.py` | `test_runner.py` | Yes | `openrouter/deepseek/deepseek-v4-flash` |
-| 8 | `scripts/run_caption.py` | Manual | Yes | `openrouter/deepseek/deepseek-v4-flash` |
-| 9 | `configs/example_config.json` | — | No | `qwen/qwen3-coder:free` |
+**Transition rule (v1.0 → v1.1 rework, steps 1–10).** Reworking a shared module (e.g. `types.py` in step 1) breaks v1.0 modules and tests that a *later* step will rewrite. Do not patch those modules ahead of their step. Instead:
 
-- **GPU-free steps (1-4, 5, 9):** Fully implement and test now.
-- **GPU-requiring steps (6-8):** Implement code, verify syntax and imports. Mark tests with `@pytest.mark.gpu` and design them to `pytest.skip` when CUDA is unavailable.
+- Skip the broken v1.0 tests, naming the step that rewrites them: `reason="v1.0 module; reworked in v1.1 step N"`.
+  - If most of a test module breaks, use a module-level `pytestmark = pytest.mark.skip(...)`.
+  - Otherwise mark the individual broken tests (or test classes) with `@pytest.mark.skip(...)`.
+- **Never delete** v1.0 tests before their step; the step that rewrites the module replaces them.
+- **Only skip what actually breaks.** Tests that still pass stay enabled.
+- Shared fixtures in `tests/conftest.py` are updated to the new types in the step that changes the types.
+- List every skipped test module in the step's TODO entry.
 
----
+The CPU suite counts as green when the new tests pass and every skip is one of these documented transition skips.
 
-## 4. Per-Step Execution Protocol
-
-For each implementation step:
-
-1. **Read** the relevant section of `SPEC.md` again before writing any code.
-2. **Write the module file** with the exact signatures and behaviour specified.
-3. **Write the test file** with the tests listed in SPEC `§10.3`.
-4. **Run the tests** (GPU-free steps only; for GPU steps, verify syntax and imports).
-5. **Report** exactly what files were created/modified and test results.
-6. **Update `TODO.md`** — mark the step complete, record test output, declare the next step.
-
-Do not combine multiple steps. Each step is a discrete task.
-
-### 4.1 State Ledger Rule (MANDATORY)
-
-**You are strictly forbidden from writing code for step N unless `TODO.md` explicitly shows all preceding steps as `[x]` completed.** This is non-negotiable. The ledger exists to maintain state continuity across rolled-over context windows where you have no memory of prior work.
-
-On every single turn, before writing any implementation code:
-
-1. **Read `TODO.md`** to establish which step is currently targeted.
-2. **Verify** all previous steps are marked `[x]` with test results documented.
-3. **If a step is marked complete but lacks test output**, stop and request the user provide the missing results before proceeding.
-4. **Immediately upon finishing a step and running its tests**, modify `TODO.md` to:
-   - Check off the item (`[ ]` → `[x]`)
-   - Document exact test results (pass/fail counts, any terminal output)
-   - Declare the next targeted file
-5. **Never skip or combine steps.** If `TODO.md` shows step 3 is next, you write step 3 — not step 4.
-
-### 4.2 Iterative Workflow Improvement Clause
-
-Immediately upon completing step N and running its unit tests, **before** marking it as complete in `TODO.md`, you must output a concise 2-sentence **Friction &amp; Streamlining Note** inside the `TODO.md` completion log. The note must explicitly cover:
-
-1. **Friction point:** What was the single biggest mechanical or structural friction point during this coding step (e.g., unexpected library behaviour, type mismatch, platform-specific path parsing)?
-2. **Streamlining guardrail:** What specific guardrail could be added to `AGENTS.md` or `SPEC.md` to ensure an agent executing this code in the future avoids this block?
-
-This clause creates a self-improving feedback loop: every step that costs time leaves a trail that prevents the same cost from recurring.
+There is no "friction note" requirement. If something cost real time and could recur, add a short entry to §6 *Known pitfalls* below.
 
 ---
 
-## 5. Coding Standards
+## 3. Coding standards
 
-### 5.1 Imports
-- Use absolute imports from the package root: `from pixel_art_auto_captioner.common.types import ImageRecord`
-- In `__init__.py` files, re-export public classes for convenient imports.
-
-### 5.2 Type hints
-- All public functions must have complete type annotations (SPEC defines them).
-- Use `Path` from `pathlib`, not `str` for file paths.
-
-### 5.3 Docstrings
-- Every public class and function must have a docstring.
-- Include parameter descriptions and return type explanations.
-
-### 5.4 Logging
-- Use `import logging; logger = logging.getLogger(__name__)`.
-- Format: `"%(asctime)s  %(levelname)-8s  %(message)s"` with `datefmt="%Y-%m-%d %H:%M:%S"`.
-- Log levels: INFO for progress, WARNING for skips, ERROR for failures.
-
-### 5.5 Error handling
-- **Fail fast:** Config errors and model load errors exit immediately.
-- **Resilient:** Per-image errors are logged and the batch continues.
-- **Cleanup:** Use `try` / `finally` to ensure `model.unload()` is always called.
+- Python ≥ 3.10. Absolute imports (`from pixel_art_auto_captioner.common.types import ImageRecord`).
+- Full type hints on public functions; `pathlib.Path` for paths in memory, `as_posix()` strings on disk.
+- Docstrings on every public class and function (params, returns, raises).
+- `logging` only, never `print()` (the CLI's `--dry_run` JSON plan goes to stdout via `sys.stdout.write`). `logger = logging.getLogger(__name__)`.
+- **Heavy imports are lazy:** `torch`/`transformers` only in `joycaption_hf.py`, `vllm` only inside `JoyCaptionVLLMModel.load()`, never at package import time.
+- No hard-coded local paths. Everything comes from config/CLI.
+- No new dependencies without an accepted proposal.
 
 ---
 
-## 6. GPU Awareness
+## 4. Package boundaries
 
-- This project targets GPUs with >= 12 GB VRAM (SPEC `§11.3`).
-- The reference `main.py` runs on an RTX 3060 with NF4 quantization.
-- When writing GPU code, **always** guard device moves and CUDA calls.
-- Tests that require GPU must be decorated with `@pytest.mark.gpu` and skip gracefully.
-
----
-
-## 7. Testing Requirements
-
-### 7.1 Framework
-- `pytest` (add to `requirements.txt` or `requirements-dev.txt`).
-- Run with: `./.env/Scripts/python.exe -m pytest tests/ -v`
-
-### 7.2 Test fixture location
-- All shared fixtures go in `tests/conftest.py` (SPEC `§10.4`).
-- Use `tmp_path` from pytest for temp directories and files.
-
-### 7.3 Test isolation
-- Tests must not depend on real images, real models, or network access (except GPU tests which need the model).
-- GPU-free tests use synthetic PIL images created via `Image.new()`.
-
-### 7.4 Coverage requirement
-- Every public function in every module must have at least one test.
-- Tests must cover both success and error paths where feasible.
-
-### 7.5 Known Pitfalls (from Iterative Workflow Improvements)
-
-These guardrails are harvested from real friction encountered during
-implementation.  They exist to prevent the same debugging cost from
-recurring in future steps or by future agents.
-
-#### PIL ``verify()`` handle lifetime (from Step 2)
-``PIL.Image.verify()`` **closes the underlying file handle** after
-reading the image header.  The result of ``verify()`` cannot be reused
-for pixel access.  ``validate_image()`` and ``load_image()`` **must
-remain separate functions** with separate ``Image.open()`` calls.
-Never refactor them into a single code path that calls both
-``verify()`` and pixel operations on the same handle.
-
-#### Source-dir boundary tests with ``tmp_path`` (from Step 3)
-When testing that a path is rejected for falling outside configured
-source directories, create **explicit sibling directories** under
-``tmp_path`` rather than nesting the out-of-bounds file inside the
-source tree:
-
-```python
-# Correct: sibling directories
-source_dir = tmp_path / "source"
-source_dir.mkdir()
-outside_dir = tmp_path / "outside"  # NOT a child of source_dir
-outside_dir.mkdir()
-
-# Wrong: orphan nested inside source tree
-# source_dir = tmp_path
-# orphan = tmp_path / "orphan.png"  # still under source_dir!
+```text
+common  ◄──  ingestion  ◄──  batch
+common  ◄──  captioning ◄──  batch
 ```
 
-Nesting the orphan inside the source directory produces a **false
-negative** — the path unintentionally resolves under a source dir
-and the expected ``ValueError`` never fires.
+- `common` imports nothing from the package and never imports torch/vllm.
+- `ingestion` and `captioning` never import each other.
+- `batch` is the only orchestrator. Scripts in `scripts/` only wire modules together.
 
-#### Dual-guard pattern for GPU model-load tests (from Step 6)
-GPU-gated tests that call ``model.load()`` **must use two independent
-skip guards**, not just one:
+---
 
-1. **CUDA availability guard** — ``@pytest.mark.skipif(not torch.cuda.is_available(), ...)``
-2. **Model-weights-on-disk guard** — a module-level helper that checks
-   for ``config.json`` at the model path (from env var or default),
-   combined with ``@pytest.mark.skipif(...)``.
+## 5. Testing rules
 
-Relying on CUDA-availability alone produces a **false failure** when
-CUDA is present but model weights haven't been cached (e.g. a CI
-runner with a GPU but no model snapshot, or a developer machine with
-the wrong ``./Models`` directory).  The dual guard ensures such tests
-skip cleanly rather than raising ``ValueError``.
+- From step 13 on: install once with `pip install -e ".[dev]"` (pyproject, SPEC §15); tests import the installed package and never edit `sys.path`. Until step 13, `tests/conftest.py` keeps adding `src/` to `sys.path`.
+- Run: `python -m pytest tests -q` (local Windows: `./.env/Scripts/python.exe -m pytest tests -q`; Linux: `python3 -m pytest tests -q`).
+- Fixtures in `tests/conftest.py`; synthetic images via `PIL.Image.new()`; temp dirs via `tmp_path`.
+- No network, no real model, no real dataset in the CPU suite.
+- Backends are tested with **fakes** (fake processor/model, fake vLLM `LLM`), injected via constructor parameters or monkeypatch, never by importing the real library.
+- GPU tests: `@pytest.mark.gpu` + **dual guard** (§6.3).
+
+---
+
+## 6. Known pitfalls
+
+### 6.1 PIL `verify()` closes the handle
+
+`Image.verify()` leaves the image unusable for pixel access. Keep `validate_image()` and `load_image()` as separate code paths with separate `Image.open()` calls. In `load_image`, call `.convert("RGB")` *inside* the `with Image.open(...)` block so the pixels are decoded before the file closes.
+
+### 6.2 Boundary tests need sibling temp dirs
+
+When testing "path outside root" errors, create `tmp_path/"root"` and `tmp_path/"outside"` as **siblings**. A file nested under the root never triggers the error.
+
+### 6.3 Dual guard for GPU tests
 
 ```python
-# Module-level: check model availability once
-import os
-from pathlib import Path
-
 _MODEL_PATH = Path(os.environ.get("JOYCAPTION_MODEL_PATH", "./Models"))
-_MODEL_AVAILABLE = _MODEL_PATH.is_dir() and (_MODEL_PATH / "config.json").exists()
-
-requires_cuda = pytest.mark.skipif(
-    not torch.cuda.is_available(),
-    reason="CUDA-capable GPU required.",
-)
-requires_model = pytest.mark.skipif(
-    not _MODEL_AVAILABLE,
-    reason="JoyCaption model not found.",
-)
-
-# On each GPU load test:
-@requires_cuda
-@requires_model
-def test_model_load_nf4(self, ...):
-    ...
+_MODEL_AVAILABLE = (_MODEL_PATH / "config.json").exists()
+requires_cuda  = pytest.mark.skipif(not _cuda_available(), reason="CUDA GPU required")
+requires_model = pytest.mark.skipif(not _MODEL_AVAILABLE, reason="JoyCaption weights not found")
 ```
+
+`_cuda_available()` must import torch lazily and return `False` if torch is missing.
+
+### 6.4 Relative path is the only unique key
+
+Stems like `000001` repeat across ~110 source folders. Never key, name or deduplicate by stem alone. Use `rel_path` (with extension).
+
+### 6.5 Linux is case-sensitive
+
+`Path.glob("*.jpg")` misses `.JPG` on Linux (the cloud) but not on Windows (local), so tests pass locally and files vanish in the cloud. Always compare `suffix.lower()`.
+
+### 6.6 HF LLaVA chat handling is fragile
+
+Use exactly `processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)` and then `processor(text=[convo], images=[image], return_tensors="pt")`, as `main.py` does. Do not tokenize inside the template call, and do not batch several conversations in one HF call.
+
+### 6.7 Reproducibility is best-effort
+
+Same seed + same backend + same versions + same GPU type ≈ same text. vLLM output can still differ when batch composition changes. Never write tests that assert bit-identical generated text from a real model.
+
+### 6.8 Resume reads JSONL, not `.txt`
+
+`.txt` files are optional exports. Never use their existence to decide what is done.
 
 ---
 
-## 8. Package Boundaries (Do Not Cross)
+## 7. Environments
 
-The package enforces a strict unidirectional dependency graph:
-
-```
-common  <--  ingestion  <--  batch
-common  <--  captioning <--  batch
-```
-
-- `common` has **no internal dependencies** — it is the leaf module.
-- `ingestion` depends **only** on `common`.
-- `captioning` depends **only** on `common` (via `PIL.Image.Image` and shared types).
-- `batch` depends on `common`, `ingestion`, and `captioning` — it is the orchestrator.
-
-**No circular imports. `ingestion` must not import from `captioning`. `common` must not import from any other module.**
-
-```
-src/pixel_art_auto_captioner/
-├── __init__.py              # version, package docstring
-├── common/                  # shared types + utilities (leaf module)
-│   ├── __init__.py
-│   ├── types.py             # ImageRecord, CaptionRecord
-│   ├── image_utils.py       # load_image, validate_image
-│   └── export_utils.py      # save_txt_sidecar, save_jsonl_entry, build_record
-├── ingestion/               # image discovery + loading
-│   ├── __init__.py
-│   └── dataloader.py        # ImageDataLoader
-├── captioning/              # model loading + inference
-│   ├── __init__.py
-│   ├── base.py              # CaptionModel ABC
-│   └── joycaption.py        # JoyCaptionModel
-└── batch/                   # orchestration runner
-    ├── __init__.py
-    └── runner.py            # CaptionRunner
-```
+| Where | What | How |
+|---|---|---|
+| Local Windows (RTX 3060) | HF backend, NF4 | `.env` venv: torch 2.12.0+cu130, transformers 5.12, bitsandbytes 0.49.2, accelerate 1.13; `./.env/Scripts/python.exe` |
+| Agent sandbox (Linux, CPU) | CPU test suite | `python3 -m pytest tests -q`; torch/vllm absent by design |
+| Cloud GPU | vLLM backend, bf16 | Docker image from `docker/Dockerfile` (SPEC §11.2) |
 
 ---
 
-## 9. Virtual Environment
+## 8. Git hygiene
 
-All Python commands execute inside the project virtual environment. The source of truth for dependencies is `requirements.txt`.
-
-**Primary entry point:** `./.env/Scripts/python.exe`
-
-```bash
-# Verify Python version
-./.env/Scripts/python.exe --version
-
-# Install runtime dependencies
-./.env/Scripts/python.exe -m pip install -r requirements.txt
-
-# Install test dependencies
-./.env/Scripts/python.exe -m pip install pytest
-
-# Run all tests
-./.env/Scripts/python.exe -m pytest tests/ -v
-
-# Run a single test file
-./.env/Scripts/python.exe -m pytest tests/test_types.py -v
-```
+- Never commit `Models/`, `input/`, `output/`, `data/`, `.env/`, `.pi/sessions/`, caption outputs, datasets, model weights or tokens.
+- Keep `.gitignore` at least as strict as it is now.
+- `main.py` is never modified.
 
 ---
 
-## 10. Git Hygiene
+## 9. Reviews
 
-- Do not commit `Models/`, `input/`, `output/`, `data/`, `.env/`, `.pi/sessions/`.
-- Do not commit model weights, generated captions, or private datasets.
-- Do not commit API keys.
-- The `.gitignore` already covers these — do not weaken it.
+External adversarial review (`REVIEW.md`, previously done with GPT) is **optional** and happens on the user's request. When a review is added, the agent:
+
+1. evaluates each critique against `SPEC.md`,
+2. marks it ✅ fixed (with test name), ❌ rejected (with reason) or ⏸ deferred, and
+3. updates the review's status line.
 
 ---
 
-## 11. Final Guardrail
+## 10. Final guardrail
 
-> **If you are unsure whether an action is allowed, consult `SPEC.md`. If `SPEC.md` does not cover it, stop and ask. Never assume.**
+> If the spec doesn't cover it, or an action would touch something outside the current step, stop and ask the user.
