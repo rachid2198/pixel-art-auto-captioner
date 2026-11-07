@@ -24,6 +24,7 @@ Batch run of steps 2–13 (approved 2026-11-07). One commit per step on `origin/
 
 - 22:35 step 1 ✅ f5df4b7 94 passed, 45 skipped
 - 22:37 step 2 ✅ 5a8b228 265 passed, 45 skipped
+- 22:45 step 3 ✅ 8b97952 420 passed, 45 skipped
 
 ---
 
@@ -36,8 +37,8 @@ Each step: code + tests → CPU suite green → update this table → report to 
 | 1 | ✅ | `common/types.py`: new `ImageRecord` fields (`source`, original size), `LoadFailure`, `CaptionRequest`, `CaptionResult`, new `CaptionRecord` (SPEC §3) | 🔁 `types.py` | `test_types.py` | 94 passed, 45 skipped (excl. `test_model.py`, see notes) |
 | 2 | ✅ | `common/config.py`: `DEFAULT_CONFIG`, `load_config`, `validate_config` (SPEC §9) | new | `test_config.py` | 265 passed, 45 skipped (excl. `test_model.py`, see step 1 notes) |
 | 3 | ✅ | `common/prompts.py`, `common/seeding.py`, `common/quality.py` (SPEC §5) | new | `test_prompts.py`, `test_seeding.py`, `test_quality.py` | 420 passed, 45 skipped (excl. `test_model.py`, see step 1 notes) |
-| 4 | ▶ | `common/image_utils.py` fixes: close handle, original size, broad except in `validate_image` (SPEC §4.5) | 🔁 `image_utils.py` | `test_image_utils.py` | — |
-| 5 | ⬜ | `ingestion/dataloader.py` rework: single `input_dir`, one cached walk, case-insensitive ext, include/exclude, hash sharding, `plan()`, threaded `iter_images()`, `LoadFailure` (SPEC §4) | 🔁 `dataloader.py` | `test_dataloader.py` | — |
+| 4 | ✅ | `common/image_utils.py` fixes: close handle, original size, broad except in `validate_image` (SPEC §4.5) | 🔁 `image_utils.py` | `test_image_utils.py` | 470 passed, 36 skipped (excl. `test_model.py`, see step 1 notes) |
+| 5 | ▶ | `ingestion/dataloader.py` rework: single `input_dir`, one cached walk, case-insensitive ext, include/exclude, hash sharding, `plan()`, threaded `iter_images()`, `LoadFailure` (SPEC §4) | 🔁 `dataloader.py` | `test_dataloader.py` | — |
 | 6 | ⬜ | `common/export_utils.py` rework: `ShardWriter`, `ResumeIndex`, txt naming + collisions, `generate_qa_page` (SPEC §8, §10.3) | 🔁 `export_utils.py` | `test_export_utils.py` | — |
 | 7 | ⬜ | `captioning/base.py`: `caption_batch`, `caption`, `describe`, `get_model()` with lazy imports; `captioning/__init__.py` stops importing torch (SPEC §6.1) | 🔁 `base.py` | `test_base.py` | — |
 | 8 | ⬜ | `captioning/joycaption_hf.py` (replaces `joycaption.py`): skip-modules quantization, no `out_proj` hack, per-request seeds, finish_reason (SPEC §6.2) | 🔁 `joycaption.py` | `test_joycaption_hf.py` (fakes) + `test_model_gpu.py` (gated) | — |
@@ -94,6 +95,20 @@ Dependencies: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8/9 → 10 → 11 → 12
   - No status helper: §5.3 defines the status rule (`error`/`empty` → `failed`, other flags → `flagged`, none → `ok`) and the retry rule (`attempt <= max_retries`) but no function, so both stay in the runner (step 10) rather than adding a public name.
 - **Deviations:**
   1. **`prompt_config` shape (interpretation, please confirm).** §5.1 builds the prompt from `caption_types`, `categories` and `sources` and indexes `prompt_config["template"]`, but in §9.2 `caption_types` lives under `generation`, not `prompts`. All three functions therefore take the `prompts` section plus one extra top-level key `caption_types` (= `generation.caption_types`). The runner (step 10) builds it as `{**cfg["prompts"], "caption_types": cfg["generation"]["caption_types"]}`. Consequence: `prompt_config_hash` also changes when a caption type's generation params (e.g. `temperature`), `system` or `sources_file` change, not only the prompt wording.
+
+### Step 4 notes (2026-11-07)
+
+- **Files touched:** `src/pixel_art_auto_captioner/common/image_utils.py` (rewritten per SPEC §4.5; line endings CRLF → LF, like the other rewritten modules); `tests/test_image_utils.py` (rewritten, 63 tests: record fields incl. `source` / `rel_path` / `stem`, RGB conversion of 6 modes, formats and upper-case extensions, original size with and without `target_size` (B5), handle closed for single- and multi-frame images and on decode errors via an `Image.open` spy on the underlying file object + a `ResourceWarning` check + a file-replace check (B10), every error path, `validate_image` returning `False` for any `Exception` incl. a CRC-corrupt PNG whose `verify()` raises `SyntaxError`, `KeyboardInterrupt` not swallowed, no torch/vllm import). The new handle and original-size tests were checked to fail against the v1.0 module.
+- **Transition skips:** removed the 9 step-4 skips in `test_image_utils.py` (file replaced). Added: none. The step-5 skips in `test_dataloader.py` stay as they are (some would pass again now that `load_image` sets `source`, but `dataloader.py` and its tests are replaced in step 5). **Obsolete files:** none. `test_model.py` unchanged (same 4 sandbox-only failures).
+- **Test environment:** as step 1 (Linux sandbox, Python 3.13, Pillow 12.3, torch stubbed outside the repo). 420 − 13 previously enabled v1.0 image_utils tests + 63 new = 470 passed, 36 skipped (all step 1 transition skips, for steps 5, 6 and 10). The module was also smoke-run on Python 3.10 + Pillow 12.3 (Cowork VM; pytest is not installed there).
+- **Choices inside the spec:**
+  - `load_image` keeps the §4.5 signature. Order: resolve `path` and `input_root`, check the boundary (`ValueError`, before the file is opened, so a missing file outside the root also gives `ValueError`), then inside `with Image.open(...)` read the original size and call `.convert("RGB")`; resize (Lanczos) after the block. `ImageRecord.path` is the resolved absolute path; `stem` comes from it.
+  - `source` = first component of `rel_path` when it has ≥ 2 parts, else `""` (SPEC §3).
+  - Dropped v1.0's `path.exists()` pre-check and its ERROR log: `Image.open` raises `FileNotFoundError` itself (message is now Python's, not "Image not found"), and decode failures are logged once by the loader/runner as `LoadFailure`s (steps 5/10).
+  - Errors propagate unchanged: `ValueError` (outside root), `FileNotFoundError`, `PIL.UnidentifiedImageError` (not an image), `OSError` (truncated / undecodable, directory). `target_size` is not validated (Pillow raises).
+  - `validate_image` catches `Exception` (not `BaseException`), logs at DEBUG and returns `False`.
+- **Deviations:** none.
+- **Note for step 5:** v1.0 `ImageDataLoader.load()` still passes `image_size` as `target_size`. §4.1 has no resize key and §3 says the image is not resized, so step 5 should call `load_image(path, input_dir)` without `target_size`.
 
 ---
 
