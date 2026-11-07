@@ -194,6 +194,7 @@ class TestDiscover:
 # ---------------------------------------------------------------------------
 
 class TestLoad:
+    @pytest.mark.skip(reason="v1.0 module; reworked in v1.1 step 5")
     def test_returns_image_record(self, tmp_path: Path):
         """load() returns an ImageRecord with correct fields."""
         _write_png(tmp_path / "sprite.png", size=(32, 64))
@@ -211,6 +212,7 @@ class TestLoad:
         assert record.rel_path == Path("sprite.png")
         assert record.image is not None
 
+    @pytest.mark.skip(reason="v1.0 module; reworked in v1.1 step 5")
     def test_resize(self, tmp_path: Path):
         """load() resizes the image when image_size is configured."""
         _write_png(tmp_path / "img.png", size=(64, 64))
@@ -223,6 +225,7 @@ class TestLoad:
         assert record.width == 32
         assert record.height == 32
 
+    @pytest.mark.skip(reason="v1.0 module; reworked in v1.1 step 5")
     def test_no_resize_when_none(self, tmp_path: Path):
         """load() keeps original size when image_size is None."""
         _write_png(tmp_path / "img.png", size=(48, 96))
@@ -273,6 +276,7 @@ class TestIteration:
         )
         assert len(loader) == 3
 
+    @pytest.mark.skip(reason="v1.0 module; reworked in v1.1 step 5")
     def test_iter_yields_all(self, tmp_path: Path):
         """__iter__ yields all discovered images."""
         for i in range(3):
@@ -287,6 +291,7 @@ class TestIteration:
         stems = {r.stem for r in records}
         assert stems == {"img_0", "img_1", "img_2"}
 
+    @pytest.mark.skip(reason="v1.0 module; reworked in v1.1 step 5")
     def test_skip_existing(self, tmp_path: Path):
         """Images with existing .txt sidecars are skipped during iteration."""
         _write_png(tmp_path / "keep.png")
@@ -334,6 +339,7 @@ class TestIteration:
 
         assert len(loader) == 1
 
+    @pytest.mark.skip(reason="v1.0 module; reworked in v1.1 step 5")
     def test_skip_existing_disabled(self, tmp_path: Path):
         """When skip_existing=False, all images are yielded even with
         pre-existing sidecars."""
@@ -355,6 +361,7 @@ class TestIteration:
         records = list(loader)
         assert len(records) == 1
 
+    @pytest.mark.skip(reason="v1.0 module; reworked in v1.1 step 5")
     def test_skip_existing_preserves_directory_structure(self, tmp_path: Path):
         """Nested-directory skip_existing uses directory-preserving
         sidecar paths (output_dir / rel_path.with_suffix('.txt'))."""
@@ -384,6 +391,7 @@ class TestIteration:
         assert len(records) == 1
         assert records[0].stem == "top"
 
+    @pytest.mark.skip(reason="v1.0 module; reworked in v1.1 step 5")
     def test_skip_existing_flat_sidecar_wrong_location(self, tmp_path: Path):
         """A flat sidecar at output_dir/nested.txt does NOT match
         an image at sub/nested.png — the sidecar must be at the correct
@@ -412,6 +420,7 @@ class TestIteration:
         assert len(records) == 1
         assert records[0].stem == "nested"
 
+    @pytest.mark.skip(reason="v1.0 module; reworked in v1.1 step 5")
     def test_corrupt_image_excluded_from_len_and_iter(self, tmp_path: Path):
         """Corrupt images are excluded during filtering so __len__
         and __iter__ agree (Critique 1 fix)."""

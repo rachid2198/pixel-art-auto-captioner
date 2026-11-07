@@ -323,6 +323,7 @@ class TestCaptionRunnerConfig:
 class TestCaptionRunnerIntegration:
     """End-to-end tests using MockCaptionModel."""
 
+    @pytest.mark.skip(reason="v1.0 module; reworked in v1.1 step 10")
     def test_runner_integration(self, runner, output_dir, mock_model):
         """Full run processes all images, writes txt + jsonl output."""
         summary = runner.run()
@@ -370,6 +371,7 @@ class TestCaptionRunnerIntegration:
         }
         assert summary["succeeded"] + summary["failed"] + summary["skipped"] == summary["total"]
 
+    @pytest.mark.skip(reason="v1.0 module; reworked in v1.1 step 10")
     def test_runner_resume(
         self, temp_image_dir, dataloader_config, mock_model, output_dir, tmp_path
     ):
@@ -411,6 +413,7 @@ class TestCaptionRunnerIntegration:
         assert summary2["succeeded"] == 0
         assert summary2["total"] == 3
 
+    @pytest.mark.skip(reason="v1.0 module; reworked in v1.1 step 10")
     def test_runner_respects_output_formats(
         self, temp_image_dir, dataloader_config, mock_model, tmp_path
     ):
@@ -522,6 +525,7 @@ class TestCaptionRunnerIntegration:
 
     # -- Critique 5: iterator load-drop invariant ---------------------------
 
+    @pytest.mark.skip(reason="v1.0 module; reworked in v1.1 step 10")
     def test_runner_iterator_load_drop_tracks_failed(
         self, temp_image_dir, output_dir
     ):

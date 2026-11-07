@@ -2,7 +2,7 @@
 
 **Project:** Pixel Art Auto-Captioner
 **Governed by:** `SPEC.md` v1.1 · `AGENTS.md` §2 (per-step protocol)
-**Last updated:** 2026-11-06
+**Last updated:** 2026-11-07
 
 Legend: ✅ done · ▶ next · ⬜ pending · 🔁 done in v1.0, needs rework for v1.1 · 👤 needs the user
 
@@ -15,7 +15,7 @@ Legend: ✅ done · ▶ next · ⬜ pending · 🔁 done in v1.0, needs rework f
 | v1.0 implementation (steps 1–7 of the old plan) | Done, 111 CPU tests passing (verified 2026-11-06 in a Linux sandbox with torch stubbed). **Not runnable end-to-end** (bug B1). |
 | v1.1 review ("grill") with the user | ✅ Done 2026-11-06. 17 decisions, see §3. |
 | SPEC / AGENTS / TODO rewrite | ✅ Done 2026-11-06. SPEC v1.1 approved by the user 2026-11-07 (incl. D1–D11). |
-| v1.1 implementation (steps 1–13) | ▶ Ready. Step 1 handed to a fresh agent session via `HANDOFF.md`. |
+| v1.1 implementation (steps 1–13) | ▶ In progress. Step 1 ✅ 2026-11-07 (94 passed, 45 transition-skipped). Step 2 next. |
 | GPU validation (steps 14–16) | ⬜ |
 
 ---
@@ -26,8 +26,8 @@ Each step: code + tests → CPU suite green → update this table → report to 
 
 | Step | Status | Work | Builds on (v1.0) | Tests | Result |
 |---|---|---|---|---|---|
-| 1 | ▶ | `common/types.py`: new `ImageRecord` fields (`source`, original size), `LoadFailure`, `CaptionRequest`, `CaptionResult`, new `CaptionRecord` (SPEC §3) | 🔁 `types.py` | `test_types.py` | — |
-| 2 | ⬜ | `common/config.py`: `DEFAULT_CONFIG`, `load_config`, `validate_config` (SPEC §9) | new | `test_config.py` | — |
+| 1 | ✅ | `common/types.py`: new `ImageRecord` fields (`source`, original size), `LoadFailure`, `CaptionRequest`, `CaptionResult`, new `CaptionRecord` (SPEC §3) | 🔁 `types.py` | `test_types.py` | 94 passed, 45 skipped (excl. `test_model.py`, see notes) |
+| 2 | ▶ | `common/config.py`: `DEFAULT_CONFIG`, `load_config`, `validate_config` (SPEC §9) | new | `test_config.py` | — |
 | 3 | ⬜ | `common/prompts.py`, `common/seeding.py`, `common/quality.py` (SPEC §5) | new | `test_prompts.py`, `test_seeding.py`, `test_quality.py` | — |
 | 4 | ⬜ | `common/image_utils.py` fixes: close handle, original size, broad except in `validate_image` (SPEC §4.5) | 🔁 `image_utils.py` | `test_image_utils.py` | — |
 | 5 | ⬜ | `ingestion/dataloader.py` rework: single `input_dir`, one cached walk, case-insensitive ext, include/exclude, hash sharding, `plan()`, threaded `iter_images()`, `LoadFailure` (SPEC §4) | 🔁 `dataloader.py` | `test_dataloader.py` | — |
@@ -44,6 +44,18 @@ Each step: code + tests → CPU suite green → update this table → report to 
 | 16 | ⬜ 👤 | Full run with the chosen caption types and GPU, within the $50–$200 budget | — | manual | — |
 
 Dependencies: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8/9 → 10 → 11 → 12 → 13 → 14 → 15 → 16. Steps 8 and 9 are independent of each other.
+
+### Step 1 notes (2026-11-07)
+
+- **Files touched:** `src/pixel_art_auto_captioner/common/types.py` (rewritten per SPEC §3: `ImageRecord`, `LoadFailure`, `CaptionRequest`, `CaptionResult`, `CaptionRecord` + constants `CAPTION_STATUSES`, `CAPTION_FLAGS`, `FINISH_REASONS`); `common/__init__.py` (new exports); `tests/test_types.py` (rewritten, 38 tests); `tests/conftest.py` (`sample_image_record` / `sample_caption_record` rebuilt for v1.1). Transition skips only, no logic changes, in `test_image_utils.py`, `test_dataloader.py`, `test_export_utils.py`, `test_runner.py`.
+- **Transition skips (45 tests):**
+  - `test_image_utils.py`: 9 `load_image` tests → step 4. `validate_image` and the `load_image` error-path tests still run.
+  - `test_dataloader.py`: 9 tests (`TestLoad` ×3, `TestIteration` ×6) → step 5. Discovery, config-validation and the other tests still run.
+  - `test_export_utils.py`: module-level `pytestmark` (16 of 23 broke) → step 6. The 7 txt-sidecar tests that still passed are skipped with the module, per the "most of a module" rule.
+  - `test_runner.py`: 4 `TestCaptionRunnerIntegration` tests (`test_runner_integration`, `test_runner_resume`, `test_runner_respects_output_formats`, `test_runner_iterator_load_drop_tracks_failed`) → step 10.
+- **Test environment:** Linux sandbox, Python 3.13, pytest 9.1, Pillow 12.3, torch stubbed outside the repo. The no-torch subprocess test runs without the stub.
+- **`test_model.py` (not touched):** 7 CPU tests pass, 6 GPU/model skips. The 4 `TestJoyCaptionLoadConfigValidation` tests fail in the sandbox because `transformers` is not installed. This is pre-existing on v1.0 (the 111 baseline also excluded `test_model.py`) and unrelated to step 1, so they are not skipped. They should pass in the local `.env`; `test_model.py` is replaced in step 8.
+- **Deviations from SPEC §3:** none.
 
 ---
 
