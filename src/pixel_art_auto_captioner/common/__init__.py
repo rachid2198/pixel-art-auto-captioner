@@ -10,9 +10,12 @@ from pixel_art_auto_captioner.common.config import (
     validate_config,
 )
 from pixel_art_auto_captioner.common.export_utils import (
+    ResumeIndex,
+    ShardWriter,
     build_record,
-    save_jsonl_entry,
-    save_txt_sidecar,
+    generate_qa_page,
+    read_records,
+    save_txt,
 )
 from pixel_art_auto_captioner.common.image_utils import load_image, validate_image
 from pixel_art_auto_captioner.common.prompts import (
@@ -50,9 +53,12 @@ __all__: list[str] = [
     "prompt_config_hash",
     "derive_seed",
     "check_caption",
+    "ShardWriter",
+    "ResumeIndex",
     "build_record",
+    "save_txt",
+    "read_records",
+    "generate_qa_page",
     "load_image",
-    "save_jsonl_entry",
-    "save_txt_sidecar",
     "validate_image",
 ]
