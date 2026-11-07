@@ -1,109 +1,136 @@
-# TODO.md — Implementation State Ledger
+# TODO.md — Implementation Ledger
 
-**Project:** Pixel Art Auto-Captioner  
-**Governed by:** `SPEC.md` `§15` | `AGENTS.md` `§4`  
-**Rule:** No code for step N unless all preceding steps are `[x]` completed.
+**Project:** Pixel Art Auto-Captioner
+**Governed by:** `SPEC.md` v1.1 · `AGENTS.md` §2 (per-step protocol)
+**Last updated:** 2026-11-06
 
----
-
-| Step | Status | File | Test File | GPU | Target Engine | Test Results |
-|------|--------|------|-----------|:---:|:---:|--------------|
-| 1 | `[x]` Complete | `common/types.py` | `test_types.py` | No | `qwen/qwen3-coder:free` | 10 passed, 0 failed |
-| 2 | `[x]` Complete | `common/image_utils.py` | `test_image_utils.py` | No | `openrouter/deepseek/deepseek-v4-flash` | 17 passed, 0 failed |
-| 3 | `[x]` Complete | `ingestion/dataloader.py` | `test_dataloader.py` | No | `openrouter/deepseek/deepseek-v4-flash` | 22 passed, 0 failed |
-| 4 | `[x]` Complete | `common/export_utils.py` | `test_export_utils.py` | No | `openrouter/deepseek/deepseek-v4-flash` | 19 passed, 0 failed |
-| 5 | `[x]` Complete | `captioning/base.py` | `test_base.py` | No | `qwen/qwen3-coder:free` | 8 passed, 0 failed (suite: 92/92) |
-| 6 | `[x]` Review | `captioning/joycaption.py` | `test_model.py` | Yes | `openrouter/deepseek/deepseek-v4-pro` | 11 passed, 6 skipped, 0 failed |
-| 7 | `[x]` Review | `batch/runner.py` | `test_runner.py` | Yes | `openrouter/deepseek/deepseek-v4-pro` | 13 passed, 0 failed |
-| 8 | `[ ]` Pending | `scripts/run_caption.py` | Manual | Yes | `openrouter/deepseek/deepseek-v4-flash` | — |
-| 9 | `[ ]` Pending | `configs/example_config.json` | — | No | `qwen/qwen3-coder:free` | — |
+Legend: ✅ done · ▶ next · ⬜ pending · 🔁 done in v1.0, needs rework for v1.1 · 👤 needs the user
 
 ---
 
-## Completion Log
+## 1. Status at a glance
 
-- **2026-06-16 — Step 1 complete:** `common/types.py` (ImageRecord + CaptionRecord dataclasses). Tests: 10 passed, 0 failed. Cross-platform path fixes applied (WindowsPath handling in asdict). Next targeted file: `common/image_utils.py`.
+| Phase | State |
+|---|---|
+| v1.0 implementation (steps 1–7 of the old plan) | Done, 111 CPU tests passing (verified 2026-11-06 in a Linux sandbox with torch stubbed). **Not runnable end-to-end** (bug B1). |
+| v1.1 review ("grill") with the user | ✅ Done 2026-11-06. 17 decisions, see §3. |
+| SPEC / AGENTS / TODO rewrite | ✅ Done 2026-11-06. SPEC v1.1 approved by the user 2026-11-07 (incl. D1–D11). |
+| v1.1 implementation (steps 1–13) | ▶ Ready. Step 1 handed to a fresh agent session via `HANDOFF.md`. |
+| GPU validation (steps 14–16) | ⬜ |
 
-- **2026-06-21 — Step 2 complete:** `common/image_utils.py` (`load_image`, `validate_image`). Tests: 17 passed, 0 failed. Files created: `src/pixel_art_auto_captioner/common/image_utils.py`, `tests/test_image_utils.py`, `tests/__init__.py`. Updated `common/__init__.py` to export the new functions.
+---
 
-  **Friction & Streamlining Note:**
-  - **Friction:** The biggest friction point was the PIL `img.verify()` behaviour — `verify()` closes the file after reading, so you cannot subsequently use the same image handle. The `validate_image` function correctly opens the image in a `with` block and calls `verify()`, but if you accidentally tried to reuse the same PIL handle after `verify()`, it would fail. This is a well-known PIL pitfall, but worth noting.
-  - **Streamlining guardrail:** Add a note to `SPEC.md` *§6.1* (or as a comment in `image_utils.py`) that `validate_image` uses `Image.open` + `verify()` which closes the file handle, and that `load_image` uses a separate `Image.open` call to get a usable handle. This prevents future refactors from accidentally merging the two patterns.
+## 2. v1.1 implementation plan
 
-  Next targeted file: `ingestion/dataloader.py`.
+Each step: code + tests → CPU suite green → update this table → report to the user. See AGENTS.md §2.
 
-- **2026-06-27 — Step 3 complete:** `ingestion/dataloader.py` (`ImageDataLoader`). Tests: 22 passed, 0 failed. Files created/modified: `src/pixel_art_auto_captioner/ingestion/dataloader.py`, `tests/test_dataloader.py`, `src/pixel_art_auto_captioner/ingestion/__init__.py` (added export). All 8 SPEC §10.3 required tests implemented plus 14 additional edge-case tests covering config validation, deduplication, sorting, empty/nonexistent directories, max_images=None, resize=None, skip_existing disabled, and len-after-filtering.
+| Step | Status | Work | Builds on (v1.0) | Tests | Result |
+|---|---|---|---|---|---|
+| 1 | ▶ | `common/types.py`: new `ImageRecord` fields (`source`, original size), `LoadFailure`, `CaptionRequest`, `CaptionResult`, new `CaptionRecord` (SPEC §3) | 🔁 `types.py` | `test_types.py` | — |
+| 2 | ⬜ | `common/config.py`: `DEFAULT_CONFIG`, `load_config`, `validate_config` (SPEC §9) | new | `test_config.py` | — |
+| 3 | ⬜ | `common/prompts.py`, `common/seeding.py`, `common/quality.py` (SPEC §5) | new | `test_prompts.py`, `test_seeding.py`, `test_quality.py` | — |
+| 4 | ⬜ | `common/image_utils.py` fixes: close handle, original size, broad except in `validate_image` (SPEC §4.5) | 🔁 `image_utils.py` | `test_image_utils.py` | — |
+| 5 | ⬜ | `ingestion/dataloader.py` rework: single `input_dir`, one cached walk, case-insensitive ext, include/exclude, hash sharding, `plan()`, threaded `iter_images()`, `LoadFailure` (SPEC §4) | 🔁 `dataloader.py` | `test_dataloader.py` | — |
+| 6 | ⬜ | `common/export_utils.py` rework: `ShardWriter`, `ResumeIndex`, txt naming + collisions, `generate_qa_page` (SPEC §8, §10.3) | 🔁 `export_utils.py` | `test_export_utils.py` | — |
+| 7 | ⬜ | `captioning/base.py`: `caption_batch`, `caption`, `describe`, `get_model()` with lazy imports; `captioning/__init__.py` stops importing torch (SPEC §6.1) | 🔁 `base.py` | `test_base.py` | — |
+| 8 | ⬜ | `captioning/joycaption_hf.py` (replaces `joycaption.py`): skip-modules quantization, no `out_proj` hack, per-request seeds, finish_reason (SPEC §6.2) | 🔁 `joycaption.py` | `test_joycaption_hf.py` (fakes) + `test_model_gpu.py` (gated) | — |
+| 9 | ⬜ | `captioning/joycaption_vllm.py`: pin + verify the vLLM version/API (SPEC §6.3) | new | `test_joycaption_vllm.py` (fake LLM) | — |
+| 10 | ⬜ | `batch/runner.py` rework: model_config only to `load()`, plan → batches → retry → writer, SIGTERM, summary invariants, cost logging (SPEC §7, §11.4) | 🔁 `runner.py` | `test_runner.py` | — |
+| 11 | ⬜ | `scripts/run_caption.py` CLI (+ `--dry_run`, exit codes); `configs/example_config.json`, `configs/local_hf_config.json`; draft `configs/sources.json` 👤 **user approves mapping** | new | `test_cli.py` | — |
+| 12 | ⬜ | `scripts/export_txt.py`, `scripts/make_qa_page.py`, `scripts/pack_dataset.py`, `scripts/unpack_dataset.sh` (SPEC §10) | new | `test_pack_dataset.py` (+ export/QA tests in `test_export_utils.py`) | — |
+| 13 | ⬜ | `pyproject.toml`; split requirements; `docker/Dockerfile`; README rewrite (local setup, RunPod volume + upload + launch) (SPEC §11, §15) | new | build check only | — |
+| 14 | ⬜ 👤 | Local smoke test on RTX 3060, HF backend NF4, ~20 images; user runs the command I provide | — | manual | — |
+| 15 | ⬜ 👤 | RunPod pilot: pack + upload, ~500 images across categories, RTX 4090 vs L40S; report img/h and $/1k images; QA page review; tune prompts and `sources.json` | — | manual | — |
+| 16 | ⬜ 👤 | Full run with the chosen caption types and GPU, within the $50–$200 budget | — | manual | — |
 
-  **Friction & Streamlining Note:**
-  - **Friction:** The `test_raises_on_path_outside_source_dirs` test initially created the "orphan" image at `tmp_path/other/orphan.png` while using `tmp_path` itself as the sole source_dir. Since `other/` is a child of `tmp_path`, the path resolved *under* the source directory — the `load()` call succeeded instead of raising `ValueError`. The root cause was a single `tmp_path` serving double duty as both the source root and the test-scratch root, making the intended boundary invisible.
-  - **Streamlining guardrail:** When writing tests that validate source-dir boundary enforcement, always create **explicit sibling directories** — one for the source and a separate one for the out-of-bounds file — rather than nesting the orphan inside what happens to be the source parent. A comment in `test_dataloader.py` or a short note in SPEC §10.3 calling out this pattern would prevent the same mental slip for future agents.
+Dependencies: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8/9 → 10 → 11 → 12 → 13 → 14 → 15 → 16. Steps 8 and 9 are independent of each other.
 
-  Next targeted file: `common/export_utils.py`.
+---
 
-- **2026-06-27 — Harness update: Friction & Streamlining guardrails applied.**
-  Both guardrails from Steps 2 and 3 have been baked into the project harness:
-  - **SPEC.md §6.1** — ``validate_image`` row now warns that ``PIL.Image.verify()`` closes the file handle and that the two code paths must remain separate.
-  - **SPEC.md §10.3** — ``test_dataloader.py`` section now includes a blockquote with the sibling-directory pattern for source-dir boundary tests, with a concrete ``source_dir`` / ``outside_dir`` code example.
-  - **AGENTS.md §7.5** — New "Known Pitfalls" subsection added under Testing Requirements, documenting both the PIL verify() handle lifetime issue and the tmp_path sibling-directory pattern with correct/incorrect examples.
+## 3. Decisions log (2026-11-06 review)
 
-  Next targeted file: `captioning/base.py` (Step 5).
+| # | Topic | Decision |
+|---|---|---|
+| Q1 | Purpose | Research dataset; training architecture undecided; `.msgpack` files are leftovers and ignored |
+| Q2 | Engine | vLLM on the cloud, HF transformers locally |
+| Q3 | Precision | bf16 cloud; NF4 local with vision tower + projector unquantized; drop the `out_proj` hack |
+| Q4 | Prompts | Per-source category prompts + game name from the folder |
+| Q5 | Caption types | Configurable list, chosen per run |
+| Q6 | Output | JSONL primary; `.txt` optional / exported |
+| Q7 | Cloud runs | Hash sharding + crash-safe resume |
+| Q8 | Environment | Docker image on the official vLLM base |
+| Q9 | Reproducibility | Per-image deterministic seeds |
+| Q10 | Quality | Flag truncated/repetitive/empty, retry once, QA HTML page; raw text untouched |
+| Q11 | Bugs | Fix all of B1–B10 |
+| Q12 | Process | Rewrite SPEC/AGENTS/TODO; improvements only after user approval |
+| Q13 | Budget | $50–$200 for a full pass |
+| Q14 | Provider | RunPod Community Cloud; pilot RTX 4090 vs L40S |
+| Q15 | Data transfer | Pack JPGs only into ~1–2 GB tars; upload to the network volume |
+| Q16 | Model comparison (proposal) | **Rejected**: JoyCaption only |
+| Q17 | `pyproject.toml` (proposal) | **Accepted** |
 
-- **2026-06-28 — Step 4 complete:** `common/export_utils.py` (`save_txt_sidecar`, `save_jsonl_entry`, `build_record`). Tests: **19 passed, 0 failed** (full suite: 80 passed, 0 failed). Files created/modified: `src/pixel_art_auto_captioner/common/export_utils.py`, `tests/test_export_utils.py`, `src/pixel_art_auto_captioner/common/__init__.py` (added exports), `tests/conftest.py` (added `sample_image_record` and `sample_caption_record` fixtures). All 3 SPEC §10.3 required tests implemented plus 16 additional edge-case tests covering: directory-structure preservation, parent-directory creation, overwrite idempotency, multi-entry JSONL append, schema key completeness, POSIX string serialisation, empty captions, nonempty `extra` dict, and generation-params round-trip fidelity.
+---
 
-  **Friction & Streamlining Note:**
-  - **Friction:** SPEC §6.2 lists only three functions for `export_utils.py` (`save_txt_sidecar`, `save_jsonl_entry`, `build_record`), but §7.3 assigns a fourth function (`generate_visual_deck`) to the same module with no function signature, no test specification, and no mention in the §15 implementation sequence. This creates a decision point: implement a stub now or defer. The choice was to implement the three functions per §6.2/§15 and flag the gap — `generate_visual_deck` has no typed interface, no output spec beyond "a lightweight, standalone index.html," and no tests, making it impossible to implement with the same confidence.
-  - **Streamlining guardrail:** Every function in the §15 step description should have a corresponding row in its module's § function table **and** at least one test in §10.3. If `generate_visual_deck` is in-scope for v1.0, SPEC.md should add a `generate_visual_deck(something) -> Path` signature to §6.2, concrete test cases to §10.3, and explicit input/output specs to §7.3. Until then, agents should implement only what the §15 step table and § function table agree on.
+## 4. v1.0 bugs found in review (all scheduled for fix, Q11)
 
-  Next targeted file: `captioning/base.py` (Step 5).
+| ID | Bug | Fixed in step |
+|---|---|---|
+| B1 | Runner passes its own config to `model.load()` (missing `model_path` → crash); spec had CLI and runner both loading the model | 10, 11 |
+| B2 | `sprite.png` + `sprite.jpg` overwrite the same `sprite.txt` | 6 |
+| B3 | Resume only checks `.txt`; JSONL-only runs duplicate; crash between txt and JSONL writes leaves gaps | 6, 10 |
+| B4 | `max_images` applied before resume → repeated dry run processes 0 | 5 |
+| B5 | `width`/`height` recorded after resize | 4 |
+| B6 | Case-sensitive extension matching on Linux | 5 |
+| B7 | Discovery twice × once per extension + upfront validation of every image | 5 |
+| B8 | Corrupt images counted as skipped, not failed | 5, 10 |
+| B9 | `requirements.txt` replaces PyPI with the cu130 index; version floors too low | 13 |
+| B10 | Unclosed file handles; `+00:00` timestamps; truncation not flagged; no CPU tests for model code | 4, 6, 3, 8 |
 
-- **2026-06-28 — Step 5 complete:** `captioning/base.py` (`CaptionModel` ABC). Tests: **8 passed, 0 failed** (full suite: 92 passed, 0 failed). Files created/modified: `src/pixel_art_auto_captioner/captioning/base.py`, `tests/test_base.py`, `src/pixel_art_auto_captioner/captioning/__init__.py` (added `CaptionModel` export). All 8 tests cover: ABC cannot be instantiated directly, concrete subclass is instantiable, missing abstract method raises `TypeError`, `model_name` attribute is accessible and persists across `load()`/`unload()`, `caption()` accepts and forwards `**gen_kwargs`, return type is `tuple[str, dict]`, and `load()`/`unload()` are callable without error.
+Also found: importing `captioning.base` pulls in torch via `captioning/__init__.py` (fixed in step 7). The `out_proj` hack silently skips at DEBUG level if its attribute path doesn't match (removed in step 8).
 
-  **Friction & Streamlining Note:**
-  - **Friction:** SPEC §15 says step 5 has "(no separate tests — tested via concrete impl)" and the TODO.md ledger column said "(via step 6)", but AGENTS.md §7.4 mandates "every public function in every module must have at least one test." The ABC has no concrete logic, but it does have testable behaviour: abstract enforcement (direct instantiation is forbidden, missing methods raise `TypeError`) and interface contracts (`caption()` return shape, `model_name` persistence). The ambiguity between the two documents forced a deliberation pause — write `test_base.py` or trust the spec's deferral to step 6?
-  - **Streamlining guardrail:** SPEC §15 and AGENTS.md §7.4 must agree on the testing policy for ABC-only modules. Either (a) SPEC §15 should list a test file for every step including ABCs (even if minimal, e.g. `test_base.py` with 3–4 contract tests), or (b) AGENTS.md should explicitly exempt ABC-only steps, stating "modules containing only abstract classes with no concrete logic are tested via their concrete implementations in the next GPU step." The latter is cleaner but either choice eliminates the ambiguity.
+---
 
-  Next targeted file: `captioning/joycaption.py` (Step 6).
-  Reverted the flattened-stem approach. ``ImageRecord.stem`` is now the
-  bare filename (e.g. ``"sprite"``), and a new ``rel_path`` field captures
-  the full relative path from ``input_root`` (e.g. ``Path("folder1/sprite.png")``).
-  ``CaptionRecord`` gains ``image_rel_path``. Export utilities will use
-  ``image_rel_path`` to reconstruct output paths that mirror the input
-  directory tree (``output/folder1/sprite.txt`` instead of
-  ``output/folder1_sprite.txt``).
+## 5. Proposals
 
-  **Changes:**
-  - `types.py`: Added ``rel_path: Path`` to ``ImageRecord``, ``image_rel_path: Path``
-    to ``CaptionRecord``. Reverted ``stem``/``image_stem`` docstrings to bare
-    filename semantics.
-  - `image_utils.py`: ``load_image()`` now returns ``stem=path.stem`` and
-    ``rel_path=relative_to(input_root)``. Removed the underscore-joining logic.
-  - `test_types.py`: All 10 tests updated with ``rel_path``/``image_rel_path`` fields.
-  - `test_image_utils.py``: Stem tests now assert bare filenames.  Added
-    ``test_load_image_stem_is_bare_filename``, ``test_load_image_rel_path_in_subdir``,
-    ``test_load_image_rel_path_deeply_nested``,
-    ``test_load_image_rel_path_distinguishes_duplicate_names``. Removed obsolete
-    underscore-collision tests.  Total: 21 tests.
-  - `SPEC.md`: Updated §2.3 (data types), §6.1 (load_image), §6.2 (export utils),
-    §7.1 (output paths).
+| ID | Proposal | Status |
+|---|---|---|
+| P1 | Compare JoyCaption with Qwen3-VL-8B in the pilot | ❌ Rejected 2026-11-06 (Q16) |
+| P2 | `pyproject.toml` packaging | ✅ Accepted 2026-11-06 (Q17), in SPEC v1.1 |
+| P3 | JPG-only tar packing for upload | ✅ Accepted 2026-11-06 (Q15), in SPEC v1.1 |
+| P4 | Always record the **resolved** Hugging Face commit hash of the downloaded model in the run manifest, even when `model.revision` is null | ⏳ Suggested 2026-11-07, awaiting the user's answer. Tiny change to `describe()` (step 8/9) + manifest (step 10). |
 
-  Tests: 32 passed, 0 failed.
+New proposals go here first (motivation, cost, alternatives), one at a time, and need the user's approval (AGENTS.md §0).
 
-- **2026-06-28 — Step 6 complete (Review):** `captioning/joycaption.py` (`JoyCaptionModel`). Tests: **11 passed, 6 skipped, 0 failed** (full suite: 116 passed, 6 skipped, 0 failed). Files created/modified: `src/pixel_art_auto_captioner/captioning/joycaption.py`, `tests/test_model.py`, `src/pixel_art_auto_captioner/captioning/__init__.py` (added `JoyCaptionModel` export), `tests/conftest.py` (registered `gpu` pytest marker).
+---
 
-  CPU-safe tests (11): constructor/model_name, not-loaded state, caption() raises RuntimeError before load, unload() is safe no-op on fresh model, config validation (missing/empty model_path, bad torch_dtype, bad quantization), default generation params match SPEC §3.2, `_apply_vision_tower_fix` silently skips non-LLaVA objects.  GPU-gated tests (6, all skipped): NF4 load, no-quant load, caption returns tuple, non-empty caption, unload frees memory, gen_kwargs forwarding.  GPU tests use dual skip guards: `requires_gpu` (CUDA check) + `requires_model` (checks for `config.json` at `JOYCAPTION_MODEL_PATH` or `./Models`).
+## 6. Open questions / items for the user
 
-  **Friction & Streamlining Note:**
-  - **Friction:** The two GPU load tests (`test_model_load_nf4`, `test_model_load_no_quant`) created their own model instances bypassing the `loaded_model` fixture's built-in `pytest.skip`, so they **failed** instead of skipping when `./Models` didn't exist. The root cause was that `requires_gpu` only checks CUDA availability, not model-weight availability on disk. A `requires_model` skip guard was needed as a second layer.
-  - **Streamlining guardrail:** GPU-gated tests that call `model.load()` should always use both a CUDA-availability guard AND a model-weights-on-disk guard. The pattern is a module-level helper (`_model_path() -> Optional[str]`) that checks for `config.json` in the model directory, combined with a `requires_model = pytest.mark.skipif(...)` decorator. This prevents false failures on CI/CPU machines where CUDA may coincidentally be available (e.g. CI runners with GPUs but no model cache) or the model directory may be stale.
+| Item | When |
+|---|---|
+| Decide proposal P4 (record resolved model commit hash) | Before step 8 |
+| Approve `configs/sources.json` (folder → category/name). Note: some sources are not pixel art (`hades`, `prey`, `lies-of-p`, `fallout`, …); keeping or removing them from the dataset is your call (out of pipeline scope) | Step 11 |
+| Final prompt wording; whether game-name injection helps or causes hallucinated details | Step 15 |
+| Pilot GPU choice (4090 vs L40S) by measured cost | Step 15 |
+| Caption types for the full run | Step 16 |
 
-  Next targeted file: `batch/runner.py` (Step 7).
+---
 
-- **2026-06-28 — Step 7 complete (Review):** `batch/runner.py` (`CaptionRunner`). Tests: **13 passed, 0 failed** (full suite: 116 passed, 6 skipped, 0 failed). Files created/modified: `src/pixel_art_auto_captioner/batch/runner.py`, `tests/test_runner.py`, `src/pixel_art_auto_captioner/batch/__init__.py` (added `CaptionRunner` export).
+## 7. History (v1.0, 2026-06-16 → 2026-07-16)
 
-  Config validation tests (7): missing/empty output_dir, missing/empty prompt_template, default output_formats, default resume=True, default generation_params={}.  Integration tests (6): full end-to-end with `MockCaptionModel` (txt + jsonl output, model lifecycle, caption call count), summary counts (total = succeeded + failed + skipped), resume (second run skips all), output_formats filtering (txt-only suppresses jsonl), model.unload() guarantee after caption() failures, model.load() failure returns zeroed summary.
+Built with Pi + DeepSeek/Qwen under the v1.0 spec, reviewed externally by GPT 5.5 (`REVIEW.md`). Full step notes are in git history (`TODO.md` before 2026-11-06).
 
-  **Friction & Streamlining Note:**
-  - **Friction:** Deciding how `skipped` count should be computed required careful thought. The dataloader's `__len__` returns count *after* `skip_existing` filtering, but the runner's summary `total` should report images discovered *before* filtering (per spec: "images discovered"). The solution was to call `dataloader.discover()` to get raw count, subtract `len(dataloader)` (filtered count) to compute `skipped`, then track `succeeded`/`failed` during iteration. This three-way split was not spelled out in SPEC §5.1.
-  - **Streamlining guardrail:** SPEC §5.1's summary dict documentation should explicitly define how each count is derived: `total = len(dataloader.discover())`, `skipped = total - len(dataloader)`, `succeeded`/`failed` from per-item tracking. Without this, future agents (or a fresh version of yourself) will waste time reverse-engineering the counting semantics from the dataloader internals.
+| v1.0 step | File | Result at the time | v1.1 status |
+|---|---|---|---|
+| 1 | `common/types.py` | 10 tests | 🔁 step 1 |
+| 2 | `common/image_utils.py` | 21 tests | 🔁 step 4 |
+| 3 | `ingestion/dataloader.py` | 29 tests (after review 2026-06-28) | 🔁 step 5 |
+| 4 | `common/export_utils.py` | 23 tests (after review 2026-07-16) | 🔁 step 6 |
+| 5 | `captioning/base.py` | 8 tests | 🔁 step 7 |
+| 6 | `captioning/joycaption.py` | 11 passed, 6 GPU-skipped | 🔁 step 8 |
+| 7 | `batch/runner.py` | 13 tests; runner fixes for review critiques 1–7 in commit `beb626f` | 🔁 step 10 |
+| 8 | `scripts/run_caption.py` | not started | → step 11 |
+| 9 | `configs/example_config.json` | not started | → step 11 |
 
-  Next targeted file: `scripts/run_caption.py` (Step 8).
+Lessons carried into AGENTS.md §6: PIL `verify()` handle lifetime; sibling temp dirs for boundary tests; dual guard for GPU tests.
+
+**REVIEW.md:** the 2026-07-16 runner review is still marked OPEN. Code inspection on 2026-11-06 shows critiques 1, 2, 4, 5 and 6 addressed in `beb626f` (load errors re-raised, unload in `finally`, `output_formats` validated, dropped-image accounting, load-success log); critique 3 was only downgraded to a warning. The whole runner is redesigned in step 10, which supersedes that review. It will be marked closed when step 10 lands.
