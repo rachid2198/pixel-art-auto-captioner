@@ -1342,3 +1342,492 @@ def test_import_pulls_in_no_heavy_or_upper_layer_modules():
 def test_module_uses_logging_not_print():
     source = Path(export_utils.__file__).read_text(encoding="utf-8")
     assert "print(" not in source
+
+
+# ===========================================================================
+# 9. Scripts: export_txt.py (SPEC §10.2) and make_qa_page.py (SPEC §10.3)
+# ===========================================================================
+# Both scripts are thin CLIs over this module; their tests live here (step 12
+# choice). They are driven in-process through ``main(argv)``, plus one
+# subprocess run each with no ``PYTHONPATH``.
+
+import builtins  # noqa: E402
+import importlib.util  # noqa: E402
+import shutil  # noqa: E402
+
+SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+
+
+def _load_script(name: str):
+    spec = importlib.util.spec_from_file_location(f"{name}_under_test", SCRIPTS / f"{name}.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+export_txt_cli = _load_script("export_txt")
+qa_cli = _load_script("make_qa_page")
+
+
+def _tree(root: Path) -> dict[str, bytes]:
+    return {p.relative_to(root).as_posix(): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+
+def _txt_tree(output_dir: Path) -> dict[str, str]:
+    root = output_dir / "txt"
+    return {k: v.decode("utf-8") for k, v in _tree(root).items()} if root.is_dir() else {}
+
+
+@pytest.fixture
+def export_setup(tmp_path: Path, sample_caption_record: CaptionRecord):
+    """An output dir and a factory for records written straight to a shard file."""
+    output_dir = tmp_path / "out"
+
+    def rec(rel: str, caption_type: str = "long", **changes) -> CaptionRecord:
+        changes.setdefault("caption_text", f"{caption_type} caption of {rel}")
+        return _rec(sample_caption_record, image_rel_path=rel, caption_type=caption_type, **changes)
+
+    def write(records, shard=(0, 1)):
+        with ShardWriter(output_dir, shard, False) as w:
+            for r in records:
+                w.write(r)
+
+    return output_dir, rec, write
+
+
+def _export(output_dir: Path, *extra: str) -> int:
+    return export_txt_cli.main(["--output_dir", str(output_dir), *extra])
+
+
+class TestExportTxtScript:
+    def test_exports_ok_records_with_section_8_2_naming(self, export_setup):
+        output_dir, rec, write = export_setup
+        write([
+            rec("celeste/0001/000001.jpg", "long", caption_text="Long one."),
+            rec("celeste/0001/000001.jpg", "short", caption_text="Short\none\n"),
+            rec("loose.png", "long", caption_text="Loose ünïcode"),
+        ])
+        assert _export(output_dir) == 0
+        assert _txt_tree(output_dir) == {
+            "celeste/0001/000001.long.txt": "Long one.",
+            "celeste/0001/000001.short.txt": "Short\none\n",  # raw text, no newline added/translated
+            "loose.long.txt": "Loose ünïcode",
+        }
+
+    def test_flagged_only_with_include_flagged_failed_never(self, export_setup):
+        output_dir, rec, write = export_setup
+        write([
+            rec("a/ok.jpg"),
+            rec("a/flag.jpg", status="flagged", flags=["truncated"]),
+            rec("a/fail.jpg", status="failed", flags=["error", "empty"], caption_text=""),
+        ])
+        assert _export(output_dir) == 0
+        assert sorted(_txt_tree(output_dir)) == ["a/ok.long.txt"]
+        assert _export(output_dir, "--include_flagged") == 0
+        assert sorted(_txt_tree(output_dir)) == ["a/flag.long.txt", "a/ok.long.txt"]
+
+    def test_counts(self, export_setup):
+        output_dir, rec, write = export_setup
+        write([
+            rec("a/1.jpg"), rec("a/1.jpg", "short"),
+            rec("a/2.jpg", status="flagged", flags=["repetitive"]),
+            rec("a/3.jpg", status="failed", flags=["error"], caption_text=""),
+        ])
+        counts = export_txt_cli.export_txt(output_dir, caption_types=["long"])
+        assert counts == {
+            "records_read": 4, "keys": 4, "written": 1, "written_ok": 1, "written_flagged": 0,
+            "skipped_failed": 1, "skipped_flagged": 1, "skipped_type": 1, "collisions": 0,
+            "stale_txt": 0,
+        }
+
+    @pytest.mark.parametrize("first,second,expected", [
+        ("ok", "failed", None),        # a later failure removes the export
+        ("failed", "ok", "NEW"),       # a later success is exported
+        ("ok", "ok", "NEW"),           # newer text wins
+        ("flagged", "ok", "NEW"),
+    ])
+    @pytest.mark.parametrize("newer_written_first", [True, False])
+    def test_latest_record_wins(self, export_setup, first, second, expected, newer_written_first):
+        output_dir, rec, write = export_setup
+        rel = "celeste/0001/000001.jpg"
+        records = [
+            rec(rel, status=second, caption_text="NEW", timestamp_utc="2026-11-08T10:00:00Z",
+                flags=["error"] if second == "failed" else []),
+            rec(rel, status=first, caption_text="OLD", timestamp_utc="2026-11-07T10:00:00Z",
+                flags=["error"] if first == "failed" else []),
+        ]
+        write(records if newer_written_first else records[::-1])
+        assert _export(output_dir, "--include_flagged") == 0
+        assert _txt_tree(output_dir).get("celeste/0001/000001.long.txt") == expected
+
+    def test_latest_wins_across_shard_files_and_offsets(self, export_setup):
+        output_dir, rec, write = export_setup
+        rel = "a/1.jpg"
+        # 10:30+02:00 == 08:30Z is earlier than 09:00Z in the other shard's file.
+        write([rec(rel, caption_text="LATER", timestamp_utc="2026-11-08T09:00:00Z")], shard=(0, 2))
+        write([rec(rel, caption_text="EARLIER", timestamp_utc="2026-11-08T10:30:00+02:00")], shard=(1, 2))
+        assert _export(output_dir) == 0
+        assert _txt_tree(output_dir) == {"a/1.long.txt": "LATER"}
+
+    def test_tie_goes_to_the_record_read_last(self, export_setup):
+        output_dir, rec, write = export_setup
+        ts = "2026-11-08T09:00:00Z"
+        write([rec("a/1.jpg", caption_text="FIRST FILE", timestamp_utc=ts)], shard=(0, 2))
+        write([rec("a/1.jpg", caption_text="SECOND FILE", timestamp_utc=ts)], shard=(1, 2))
+        assert _export(output_dir) == 0
+        assert _txt_tree(output_dir) == {"a/1.long.txt": "SECOND FILE"}
+
+    def test_reads_every_captions_file_but_not_failures(self, export_setup):
+        output_dir, rec, write = export_setup
+        write([rec("a/1.jpg")], shard=(0, 3))
+        write([rec("a/2.jpg")], shard=(2, 3))
+        merged = output_dir / "captions" / "MERGED.JSONL"
+        merged.write_text(export_utils._dumps(rec("a/3.jpg")) + "\n", encoding="utf-8")
+        failures = output_dir / "failures" / "shard-000-of-001.jsonl"
+        failures.parent.mkdir()
+        failures.write_text(export_utils._dumps(rec("a/4.jpg")) + "\n", encoding="utf-8")
+        assert _export(output_dir) == 0
+        assert sorted(_txt_tree(output_dir)) == ["a/1.long.txt", "a/2.long.txt", "a/3.long.txt"]
+
+    def test_caption_types_filter(self, export_setup, caplog):
+        output_dir, rec, write = export_setup
+        write([rec("a/1.jpg", "long"), rec("a/1.jpg", "short"), rec("a/1.jpg", "tags")])
+        with caplog.at_level(logging.WARNING):
+            assert _export(output_dir, "--caption_types", "short", "tags", "sd_prompt") == 0
+        assert sorted(_txt_tree(output_dir)) == ["a/1.short.txt", "a/1.tags.txt"]
+        assert "sd_prompt" in caplog.text
+
+    def test_collision_rule(self, export_setup):
+        output_dir, rec, write = export_setup
+        write([
+            rec("s/0001/sprite.png", caption_text="PNG"),
+            rec("s/0001/sprite.jpg", caption_text="JPG"),
+            rec("s/0001/Hero.png", caption_text="HERO PNG"),
+            rec("s/0001/hero.JPG", status="failed", flags=["error"], caption_text=""),
+            rec("s/0002/sprite.png", caption_text="OTHER FOLDER"),
+        ])
+        assert _export(output_dir) == 0
+        assert _txt_tree(output_dir) == {
+            "s/0001/sprite.png.long.txt": "PNG",
+            "s/0001/sprite.jpg.long.txt": "JPG",
+            "s/0001/Hero.png.long.txt": "HERO PNG",  # collides with a failed image, case-insensitively
+            "s/0002/sprite.long.txt": "OTHER FOLDER",
+        }
+
+    def test_collision_set_unit(self):
+        got = export_txt_cli.collision_set(["a/x.png", "a/X.jpg", "b/x.png", "a/y.png", "a/x.png"])
+        assert got == frozenset({"a/x.png", "a/X.jpg"})
+
+    def test_same_files_as_the_runner_writer(self, tmp_path, export_setup):
+        output_dir, rec, _ = export_setup
+        records = [
+            rec("s/0001/sprite.png", caption_text="P"), rec("s/0001/sprite.jpg", caption_text="J"),
+            rec("s/0001/a.jpg", "short", caption_text="S"),
+            rec("s/0001/b.jpg", status="flagged", flags=["truncated"], caption_text="F"),
+        ]
+        collisions = {Path("s/0001/sprite.png"), Path("s/0001/sprite.jpg")}
+        with ShardWriter(output_dir, (0, 1), True, collision_set=collisions) as w:
+            for r in records:
+                w.write(r)
+        runner_txt = _txt_tree(output_dir)
+        other = tmp_path / "other"
+        shutil.copytree(output_dir / "captions", other / "captions")
+        assert _export(other, "--include_flagged") == 0
+        assert _txt_tree(other) == runner_txt
+
+    def test_never_reads_txt_and_never_deletes(self, export_setup, monkeypatch, caplog):
+        output_dir, rec, write = export_setup
+        write([rec("a/1.jpg", caption_text="FRESH")])
+        txt = output_dir / "txt" / "a"
+        txt.mkdir(parents=True)
+        (txt / "1.long.txt").write_bytes(b"\xff\xfe garbage")
+        (txt / "stale.long.txt").write_text("stale")
+        opened: list[tuple[str, str]] = []
+        real_open, real_io_open = builtins.open, io.open
+
+        def spy(real):
+            def wrapper(file, mode="r", *a, **k):
+                if not isinstance(file, int):
+                    opened.append((os.fsdecode(file), mode))
+                return real(file, mode, *a, **k)
+            return wrapper
+
+        monkeypatch.setattr(builtins, "open", spy(real_open))
+        monkeypatch.setattr(io, "open", spy(real_io_open))
+        with caplog.at_level(logging.WARNING):
+            assert _export(output_dir) == 0
+        monkeypatch.undo()
+        txt_reads = [(f, m) for f, m in opened if f.endswith(".txt") and not any(c in m for c in "wax+")]
+        assert txt_reads == []
+        assert (txt / "1.long.txt").read_text() == "FRESH"
+        assert (txt / "stale.long.txt").read_text() == "stale"
+        assert "1 .txt files" in caplog.text and "a/stale.long.txt" in caplog.text
+
+    def test_malformed_final_line_skipped(self, export_setup, caplog):
+        output_dir, rec, write = export_setup
+        write([rec("a/1.jpg")])
+        with open(_shard_file(output_dir), "ab") as fh:
+            fh.write(b'{"image_rel_path": "a/2.jp')
+        with caplog.at_level(logging.WARNING):
+            assert _export(output_dir) == 0
+        assert sorted(_txt_tree(output_dir)) == ["a/1.long.txt"]
+        assert "malformed final line" in caplog.text
+
+    @pytest.mark.parametrize("bad", [
+        "{broken",                                                        # malformed middle line
+        json.dumps({"image_rel_path": "a/x.jpg", "caption_type": "long", "status": "ok"}),  # no timestamp
+        json.dumps({"image_rel_path": "a/x.jpg", "caption_type": "long", "status": "ok",
+                    "timestamp_utc": "yesterday"}),
+    ])
+    def test_invalid_records_exit_1(self, export_setup, bad, caplog):
+        output_dir, rec, write = export_setup
+        _write_jsonl(_shard_file(output_dir), [bad, export_utils._dumps(rec("a/1.jpg"))])
+        with caplog.at_level(logging.ERROR):
+            assert _export(output_dir) == 1
+        assert "Export failed" in caplog.text
+        assert _txt_tree(output_dir) == {}
+
+    def test_unsafe_rel_path_exit_1(self, export_setup):
+        output_dir, rec, write = export_setup
+        line = json.loads(export_utils._dumps(rec("a/1.jpg")))
+        line["image_rel_path"] = "../escape.jpg"
+        _write_jsonl(_shard_file(output_dir), [json.dumps(line)])
+        assert _export(output_dir) == 1
+        assert not (output_dir / "escape.long.txt").exists()
+
+    def test_files_changing_between_passes_exit_1(self, export_setup, monkeypatch):
+        output_dir, rec, write = export_setup
+        write([rec("a/1.jpg"), rec("a/2.jpg")])
+        real = export_txt_cli.read_records
+        calls = {"n": 0}
+
+        def changing(files):
+            calls["n"] += 1
+            records = list(real(files))
+            return iter(records if calls["n"] == 1 else [records[1], records[0]])
+
+        monkeypatch.setattr(export_txt_cli, "read_records", changing)
+        assert _export(output_dir) == 1
+
+    def test_missing_output_dir_or_captions_exit_1(self, tmp_path):
+        assert _export(tmp_path / "nope") == 1
+        assert not (tmp_path / "nope").exists()
+        (tmp_path / "empty").mkdir()
+        assert _export(tmp_path / "empty") == 1
+        assert not (tmp_path / "empty" / "txt").exists()
+
+    def test_usage_and_help(self, capsys):
+        assert export_txt_cli.main([]) == 1
+        assert export_txt_cli.main(["--output_dir", "x", "--bogus"]) == 1
+        assert export_txt_cli.main(["--help"]) == 0
+        out = capsys.readouterr().out
+        for flag in ("--output_dir", "--caption_types", "--include_flagged"):
+            assert flag in out
+        args = export_txt_cli.parse_args(["--output_dir", "d"])
+        assert args.caption_types is None and args.include_flagged is False
+
+    def test_interrupt_exit_2(self, export_setup, monkeypatch):
+        output_dir, rec, write = export_setup
+        write([rec("a/1.jpg")])
+
+        def boom(*a, **k):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(export_txt_cli, "save_txt", boom)
+        assert _export(output_dir) == 2
+
+    def test_write_error_exit_1(self, export_setup, monkeypatch):
+        output_dir, rec, write = export_setup
+        write([rec("a/1.jpg")])
+
+        def full(*a, **k):
+            raise OSError(28, "No space left on device")
+
+        monkeypatch.setattr(export_txt_cli, "save_txt", full)
+        assert _export(output_dir) == 1
+
+    def test_uses_export_utils_functions(self):
+        assert export_txt_cli.save_txt is save_txt
+        assert export_txt_cli.read_records is read_records
+
+    def test_subprocess_without_pythonpath(self, export_setup):
+        output_dir, rec, write = export_setup
+        write([rec("a/1.jpg", caption_text="X")])
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / "export_txt.py"), "--output_dir", str(output_dir)],
+            env=env, capture_output=True, text=True, timeout=60,
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout == "" and "  INFO      " in proc.stderr
+        assert _txt_tree(output_dir) == {"a/1.long.txt": "X"}
+
+
+def _qa(output_dir: Path, input_dir: Path, *extra: str) -> int:
+    return qa_cli.main(["--output_dir", str(output_dir), "--input_dir", str(input_dir), *extra])
+
+
+def _qa_pages(output_dir: Path) -> list[Path]:
+    return sorted((output_dir / "qa").glob("*.html")) if (output_dir / "qa").is_dir() else []
+
+
+class TestMakeQaPageScript:
+    def _data(self, qa_setup):
+        input_dir, output_dir, add, write = qa_setup
+        write([
+            add("celeste/0001/000001.jpg"), add("celeste/0001/000001.jpg", "short"),
+            add("celeste/0001/000002.jpg", status="flagged", flags=["truncated"]),
+            add("hades/0001/000001.png", status="failed", flags=["error"], caption_text=""),
+            add("hades/0001/000002.png"),
+        ])
+        return input_dir, output_dir
+
+    def test_writes_a_self_contained_page(self, qa_setup):
+        input_dir, output_dir = self._data(qa_setup)
+        assert _qa(output_dir, input_dir) == 0
+        (page,) = _qa_pages(output_dir)
+        assert re.fullmatch(r"qa-\d{8}T\d{6}Z\.html", page.name)
+        parser = _parse_html(page)
+        assert not {t for t, _ in parser.tags} & {"script", "link", "iframe"}
+        assert all(a["src"].startswith("data:image/jpeg;base64,") for t, a in parser.tags if t == "img")
+        assert sorted(_rows(parser)) == [
+            "celeste/0001/000001.jpg", "celeste/0001/000002.jpg", "hades/0001/000002.png",
+        ]
+
+    def test_flags_are_passed_to_generate_qa_page(self, qa_setup, monkeypatch):
+        input_dir, output_dir = self._data(qa_setup)
+        calls = []
+
+        def spy(out, inp, **kwargs):
+            calls.append((out, inp, kwargs))
+            return out / "qa" / "x.html"
+
+        monkeypatch.setattr(qa_cli, "generate_qa_page", spy)
+        assert _qa(output_dir, input_dir, "--n", "7", "--seed", "3", "--status", "failed, ok",
+                   "--source", "hades", "celeste") == 0
+        assert calls == [(output_dir, input_dir, {
+            "n": 7, "seed": 3, "statuses": ["failed", "ok"], "sources": ["hades", "celeste"],
+        })]
+        calls.clear()
+        assert _qa(output_dir, input_dir) == 0
+        assert calls[0][2] == {"n": 200, "seed": 0, "statuses": ["ok", "flagged"], "sources": None}
+
+    def test_uses_the_export_utils_function(self):
+        assert qa_cli.generate_qa_page is generate_qa_page
+
+    def test_status_and_source_filters(self, qa_setup):
+        input_dir, output_dir = self._data(qa_setup)
+        assert _qa(output_dir, input_dir, "--status", "failed") == 0
+        assert _rows(_parse_html(_qa_pages(output_dir)[-1])) == ["hades/0001/000001.png"]
+
+    def test_source_filter_and_n(self, qa_setup, tmp_path):
+        input_dir, output_dir = self._data(qa_setup)
+        assert _qa(output_dir, input_dir, "--source", "celeste", "--n", "1") == 0
+        rows = _rows(_parse_html(_qa_pages(output_dir)[-1]))
+        assert len(rows) == 1 and rows[0].startswith("celeste/")
+
+    def test_same_seed_same_sample(self, qa_setup, monkeypatch):
+        input_dir, output_dir = self._data(qa_setup)
+        names = iter(["one", "two"])
+        real = qa_cli.generate_qa_page
+        monkeypatch.setattr(qa_cli, "generate_qa_page", lambda *a, **k: real(*a, name=next(names), **k))
+        assert _qa(output_dir, input_dir, "--n", "2", "--seed", "5") == 0
+        assert _qa(output_dir, input_dir, "--n", "2", "--seed", "5") == 0
+        one = _rows(_parse_html(output_dir / "qa" / "one.html"))
+        assert one == _rows(_parse_html(output_dir / "qa" / "two.html")) and len(one) == 2
+
+    def test_n_zero_writes_nothing(self, qa_setup):
+        input_dir, output_dir = self._data(qa_setup)
+        assert _qa(output_dir, input_dir, "--n", "0") == 0
+        assert _qa_pages(output_dir) == []
+
+    @pytest.mark.parametrize("extra", [
+        ["--n", "-1"], ["--status", "done"], ["--status", ","], ["--status", "ok,weird"],
+    ])
+    def test_bad_values_exit_1(self, qa_setup, extra, caplog):
+        input_dir, output_dir = self._data(qa_setup)
+        with caplog.at_level(logging.ERROR):
+            assert _qa(output_dir, input_dir, *extra) == 1
+        assert "QA page failed" in caplog.text
+        assert _qa_pages(output_dir) == []
+
+    def test_missing_dirs_exit_1(self, qa_setup, tmp_path):
+        input_dir, output_dir = self._data(qa_setup)
+        assert _qa(output_dir, tmp_path / "no-input") == 1
+        assert _qa(tmp_path / "no-output", input_dir) == 1
+        assert not (tmp_path / "no-output").exists()
+
+    def test_input_dir_untouched(self, qa_setup):
+        input_dir, output_dir = self._data(qa_setup)
+        before = {p: (p.stat().st_mtime_ns, p.read_bytes()) for p in input_dir.rglob("*") if p.is_file()}
+        dirs_before = sorted(p.as_posix() for p in input_dir.rglob("*"))
+        assert _qa(output_dir, input_dir) == 0
+        assert {p: (p.stat().st_mtime_ns, p.read_bytes()) for p in input_dir.rglob("*") if p.is_file()} == before
+        assert sorted(p.as_posix() for p in input_dir.rglob("*")) == dirs_before
+
+    def test_parse_statuses(self):
+        assert qa_cli.parse_statuses("ok,flagged") == ["ok", "flagged"]
+        assert qa_cli.parse_statuses(" ok , ,flagged,ok ") == ["ok", "flagged"]
+        assert qa_cli.parse_statuses(",") == []
+
+    def test_usage_and_help(self, capsys):
+        assert qa_cli.main([]) == 1
+        assert qa_cli.main(["--output_dir", "o"]) == 1
+        assert qa_cli.main(["--output_dir", "o", "--input_dir", "i", "--n", "x"]) == 1
+        assert qa_cli.main(["--help"]) == 0
+        out = capsys.readouterr().out
+        for flag in ("--output_dir", "--input_dir", "--n", "--seed", "--status", "--source"):
+            assert flag in out
+
+    def test_interrupt_exit_2(self, qa_setup, monkeypatch):
+        input_dir, output_dir = self._data(qa_setup)
+
+        def boom(*a, **k):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(qa_cli, "generate_qa_page", boom)
+        assert _qa(output_dir, input_dir) == 2
+
+    def test_subprocess_without_pythonpath(self, qa_setup):
+        input_dir, output_dir = self._data(qa_setup)
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / "make_qa_page.py"), "--output_dir", str(output_dir),
+             "--input_dir", str(input_dir), "--n", "2"],
+            env=env, capture_output=True, text=True, timeout=60,
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout == "" and "QA page written" in proc.stderr
+        assert len(_qa_pages(output_dir)) == 1
+
+
+class TestScriptSources:
+    @pytest.mark.parametrize("name", ["export_txt", "make_qa_page"])
+    def test_standards(self, name):
+        import ast
+
+        path = SCRIPTS / f"{name}.py"
+        raw = path.read_bytes()
+        assert b"\r" not in raw
+        source = raw.decode("utf-8")
+        assert "print(" not in source
+        tree = ast.parse(source)
+        assert ast.get_docstring(tree)
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and not node.name.startswith("_"):
+                assert ast.get_docstring(node), node.name
+            if isinstance(node, ast.FunctionDef) and not node.name.startswith("_"):
+                assert node.returns is not None, node.name
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                assert not node.module.startswith(("pixel_art_auto_captioner.captioning",
+                                                   "pixel_art_auto_captioner.batch"))
+                assert node.module.split(".")[0] not in ("torch", "vllm", "transformers")
+
+    def test_log_handlers_removed_after_main(self, tmp_path):
+        before = list(logging.getLogger().handlers)
+        export_txt_cli.main(["--output_dir", str(tmp_path / "x")])
+        qa_cli.main(["--output_dir", str(tmp_path / "x"), "--input_dir", str(tmp_path)])
+        assert logging.getLogger().handlers == before
