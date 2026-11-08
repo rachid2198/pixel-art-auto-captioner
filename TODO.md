@@ -15,8 +15,8 @@ Legend: ✅ done · ▶ next · ⬜ pending · 🔁 done in v1.0, needs rework f
 | v1.0 implementation (steps 1–7 of the old plan) | Done, 111 CPU tests passing (verified 2026-11-06 in a Linux sandbox with torch stubbed). **Not runnable end-to-end** (bug B1). |
 | v1.1 review ("grill") with the user | ✅ Done 2026-11-06. 17 decisions, see §3. |
 | SPEC / AGENTS / TODO rewrite | ✅ Done 2026-11-06. SPEC v1.1 approved by the user 2026-11-07 (incl. D1–D11). |
-| v1.1 implementation (steps 1–13) | ▶ In progress. Step 1 ✅ 2026-11-07 (94 passed, 45 transition-skipped). Step 2 next. |
-| GPU validation (steps 14–16) | ⬜ |
+| v1.1 implementation (steps 1–13) | ✅ Done 2026-11-08 (overnight batch run). 1520 passed, 10 skipped (GPU guards). Last commit `8a1eb2b` on `origin/v1.1`. |
+| GPU validation (steps 14–16) | ▶ Step 14 (👤 local smoke test) next. |
 
 ### Overnight log
 
@@ -34,6 +34,31 @@ Batch run of steps 2–13 (approved 2026-11-07). One commit per step on `origin/
 - 03:23 step 10 ✅ 46f52d6 1220 passed, 10 skipped (GPU guards only; no transition skips left)
 - 03:35 step 11 ✅ 18f8fdb 1365 passed, 10 skipped (👤 configs/sources.json draft awaiting approval)
 - 03:53 step 12 ✅ 61de1a7 1501 passed, 10 skipped
+- 04:05 step 13 ✅ 8a1eb2b 1520 passed, 10 skipped (editable install; 1519 passed, 11 skipped with PYTHONPATH=src)
+
+### Overnight run summary (2026-11-08)
+
+- **Done:** steps 1–13, one commit per step on `origin/v1.1` (`f5df4b7` … `8a1eb2b`). Every step was verified independently before its commit: files mirrored from the PC, full CPU suite run, diff limited to the step.
+- **Tests:** 1520 passed, 10 skipped (all GPU guards) from an editable install; no torch stub needed since step 7; no transition skips left.
+- **Interruption:** the run paused 23:50–02:55 at the usage limit during step 9; step 9 was resumed and fully re-tested.
+- **Needs you:**
+  - 👤 Approve `configs/sources.json` (draft, 111 folders; 19 uncertain entries listed in the step 11 notes) before the pilot.
+  - Decide P4 (record resolved model commit hash) and P5 (`.gitattributes` for `*.sh`), §5.
+  - Two open questions in §6: the resume prompt-change warning (step 6) and `prompts.system` reaching no backend (step 8). The code keeps the spec baseline for both.
+  - Review the per-step **Deviations** in the step notes below (none change a public interface without being recorded).
+  - `REVIEW.md` was not touched; its 2026-07-16 runner review can now be closed (step 10 notes).
+- **Not verifiable here (step 14/15):** real JoyCaption load (HF NF4 + vLLM 0.33.0 API), Docker image build, RunPod upload/unpack.
+- **Next (step 14):** on the PC, after syncing: `.\.env\Scripts\python.exe -m pip install -e ".[local,dev]"`, then `.\.env\Scripts\python.exe -m pytest tests -q`, then the local smoke test.
+- **Sync your PC with GitHub** (the PC holds the same content uncommitted; `tests/test_model.py` is removed in git but still on the PC):
+
+  ```text
+  cd F:\Research\Code\pixel-art-auto-captioner
+  git fetch origin
+  git status            # expect only files that are also in origin/v1.1, plus untracked HANDOFF.md/OVERNIGHT_RUN.md
+  git reset --hard origin/v1.1
+  ```
+
+  `reset --hard` discards local uncommitted edits. They are identical to what was pushed (every step pushed successfully). Files removed in git, such as `tests/test_model.py`, disappear from the PC with this command.
 
 ---
 
