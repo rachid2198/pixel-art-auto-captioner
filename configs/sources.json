@@ -1,0 +1,446 @@
+{
+  "a-valley-without-wind": {
+    "category": "game_crop",
+    "name": "A Valley Without Wind"
+  },
+  "aground": {
+    "category": "game_crop",
+    "name": "Aground"
+  },
+  "ai-war": {
+    "category": "game_crop",
+    "name": "AI War: Fleet Command"
+  },
+  "apotheon": {
+    "category": "game_crop",
+    "name": "Apotheon"
+  },
+  "aquaria": {
+    "category": "game_crop",
+    "name": "Aquaria"
+  },
+  "astro-aqua-kitty": {
+    "category": "game_crop",
+    "name": "Astro Aqua Kitty"
+  },
+  "axiom-verge": {
+    "category": "game_crop",
+    "name": "Axiom Verge"
+  },
+  "axiom-verge 2": {
+    "category": "game_crop",
+    "name": "Axiom Verge 2"
+  },
+  "barotrauma": {
+    "category": "game_crop",
+    "name": "Barotrauma"
+  },
+  "black-skylands": {
+    "category": "game_crop",
+    "name": "Black Skylands"
+  },
+  "blaster-master-zero": {
+    "category": "game_crop",
+    "name": "Blaster Master Zero"
+  },
+  "broforce": {
+    "category": "game_crop",
+    "name": "Broforce"
+  },
+  "carrion": {
+    "category": "game_crop",
+    "name": "Carrion"
+  },
+  "cavalry-girls": {
+    "category": "game_crop",
+    "name": "Cavalry Girls"
+  },
+  "cave-story": {
+    "category": "game_crop",
+    "name": "Cave Story"
+  },
+  "celeste": {
+    "category": "game_crop",
+    "name": "Celeste"
+  },
+  "chasm": {
+    "category": "game_crop",
+    "name": "Chasm"
+  },
+  "core-keeper": {
+    "category": "game_crop",
+    "name": "Core Keeper"
+  },
+  "craft-the-world": {
+    "category": "game_crop",
+    "name": "Craft the World"
+  },
+  "crosscode": {
+    "category": "game_crop",
+    "name": "CrossCode"
+  },
+  "crying-suns": {
+    "category": "game_crop",
+    "name": "Crying Suns"
+  },
+  "crypt-necrodancer": {
+    "category": "game_crop",
+    "name": "Crypt of the NecroDancer"
+  },
+  "cult-of-the-lamb": {
+    "category": "game_crop",
+    "name": "Cult of the Lamb"
+  },
+  "darkest-dungeon": {
+    "category": "game_crop",
+    "name": "Darkest Dungeon"
+  },
+  "dave-the-diver": {
+    "category": "game_crop",
+    "name": "Dave the Diver"
+  },
+  "dead-cells": {
+    "category": "game_crop",
+    "name": "Dead Cells"
+  },
+  "destroy-all-humans": {
+    "category": "game_crop",
+    "name": "Destroy All Humans!"
+  },
+  "dig-deep-in-galaxies": {
+    "category": "game_crop",
+    "name": "Dig Deep in Galaxies"
+  },
+  "distant-worlds": {
+    "category": "game_crop",
+    "name": "Distant Worlds: Universe"
+  },
+  "dogolrax": {
+    "category": "game_crop",
+    "name": "Dogolrax"
+  },
+  "downwell": {
+    "category": "game_crop",
+    "name": "Downwell"
+  },
+  "dustforce": {
+    "category": "game_crop",
+    "name": "Dustforce"
+  },
+  "dyson-sphere-program": {
+    "category": "game_crop",
+    "name": "Dyson Sphere Program"
+  },
+  "empires-of-the-undergrowth": {
+    "category": "game_crop",
+    "name": "Empires of the Undergrowth"
+  },
+  "epic-astro-story": {
+    "category": "game_crop",
+    "name": "Epic Astro Story"
+  },
+  "fabular-once-upon-a-spacetime": {
+    "category": "game_crop",
+    "name": "Fabular: Once upon a Spacetime"
+  },
+  "factorio": {
+    "category": "game_crop",
+    "name": "Factorio"
+  },
+  "fallout": {
+    "category": "game_crop",
+    "name": "Fallout"
+  },
+  "fallout 2": {
+    "category": "game_crop",
+    "name": "Fallout 2"
+  },
+  "fez": {
+    "category": "game_crop",
+    "name": "Fez"
+  },
+  "forager": {
+    "category": "game_crop",
+    "name": "Forager"
+  },
+  "ghost-1.0": {
+    "category": "game_crop",
+    "name": "Ghost 1.0"
+  },
+  "gnorp-apologue": {
+    "category": "game_crop",
+    "name": "The Gnorp Apologue"
+  },
+  "graveyard-keeper": {
+    "category": "game_crop",
+    "name": "Graveyard Keeper"
+  },
+  "grim-nights": {
+    "category": "game_crop",
+    "name": "Grim Nights"
+  },
+  "hades": {
+    "category": "game_crop",
+    "name": "Hades"
+  },
+  "halcyon-6": {
+    "category": "game_crop",
+    "name": "Halcyon 6: Starbase Commander"
+  },
+  "hardcore-mecha": {
+    "category": "game_crop",
+    "name": "Hardcore Mecha"
+  },
+  "helldivers": {
+    "category": "game_crop",
+    "name": "Helldivers"
+  },
+  "highfleet": {
+    "category": "game_crop",
+    "name": "HighFleet"
+  },
+  "hollow-knight": {
+    "category": "game_crop",
+    "name": "Hollow Knight"
+  },
+  "hotline-miami": {
+    "category": "game_crop",
+    "name": "Hotline Miami"
+  },
+  "icarus": {
+    "category": "game_crop",
+    "name": "Icarus"
+  },
+  "iconoclasts": {
+    "category": "game_crop",
+    "name": "Iconoclasts"
+  },
+  "industries-of-titan": {
+    "category": "game_crop",
+    "name": "Industries of Titan"
+  },
+  "inmost": {
+    "category": "game_crop",
+    "name": "Inmost"
+  },
+  "kandria": {
+    "category": "game_crop",
+    "name": "Kandria"
+  },
+  "katanna-zero": {
+    "category": "game_crop",
+    "name": "Katana ZERO"
+  },
+  "keplerth": {
+    "category": "game_crop",
+    "name": "Keplerth"
+  },
+  "kero-blaster": {
+    "category": "game_crop",
+    "name": "Kero Blaster"
+  },
+  "king-arthurs-gold": {
+    "category": "game_crop",
+    "name": "King Arthur's Gold"
+  },
+  "last-command": {
+    "category": "game_crop",
+    "name": "Last Command"
+  },
+  "lies-of-p": {
+    "category": "game_crop",
+    "name": "Lies of P"
+  },
+  "lobotomy-corporation": {
+    "category": "game_crop",
+    "name": "Lobotomy Corporation"
+  },
+  "mark-of-the-ninja": {
+    "category": "game_crop",
+    "name": "Mark of the Ninja"
+  },
+  "metal-slug": {
+    "category": "game_crop",
+    "name": "Metal Slug"
+  },
+  "metro-last-light": {
+    "category": "game_crop",
+    "name": "Metro: Last Light"
+  },
+  "metroid-fusion-dataset": {
+    "category": "sprite_sheet",
+    "name": "Metroid Fusion"
+  },
+  "midjourney-dataset": {
+    "category": "ai_pixel_art",
+    "name": "Midjourney"
+  },
+  "mindustry": {
+    "category": "game_crop",
+    "name": "Mindustry"
+  },
+  "mistward": {
+    "category": "game_crop",
+    "name": "Mistward"
+  },
+  "momodora-reverie-under-the-moonlight": {
+    "category": "game_crop",
+    "name": "Momodora: Reverie Under the Moonlight"
+  },
+  "nine-sols": {
+    "category": "game_crop",
+    "name": "Nine Sols"
+  },
+  "nom-nom-galaxy": {
+    "category": "game_crop",
+    "name": "Nom Nom Galaxy"
+  },
+  "oxygen-not-included": {
+    "category": "game_crop",
+    "name": "Oxygen Not Included"
+  },
+  "phoenotopia-awakening": {
+    "category": "game_crop",
+    "name": "Phoenotopia: Awakening"
+  },
+  "pinterest-dataset-game": {
+    "category": "mixed_collection",
+    "name": "Pinterest Game Art"
+  },
+  "pinterest-dataset-video-game": {
+    "category": "mixed_collection",
+    "name": "Pinterest Video Game Art"
+  },
+  "pinterest-pixel-art-2023-07-01-v3": {
+    "category": "mixed_collection",
+    "name": "Pinterest Pixel Art"
+  },
+  "pixel-art-dataset": {
+    "category": "mixed_collection",
+    "name": "Pixel Art Dataset"
+  },
+  "prey": {
+    "category": "game_crop",
+    "name": "Prey"
+  },
+  "rain-world": {
+    "category": "game_crop",
+    "name": "Rain World"
+  },
+  "rebel-transmute": {
+    "category": "game_crop",
+    "name": "Rebel Transmute"
+  },
+  "regions-of-ruin": {
+    "category": "game_crop",
+    "name": "Regions of Ruin"
+  },
+  "rimworld": {
+    "category": "game_crop",
+    "name": "RimWorld"
+  },
+  "rogue-legacy": {
+    "category": "game_crop",
+    "name": "Rogue Legacy"
+  },
+  "rusted-moss": {
+    "category": "game_crop",
+    "name": "Rusted Moss"
+  },
+  "sea-start": {
+    "category": "game_crop",
+    "name": "Sea of Stars"
+  },
+  "space-rangers-hd-a-war-apart": {
+    "category": "game_crop",
+    "name": "Space Rangers HD: A War Apart"
+  },
+  "star-renegades": {
+    "category": "game_crop",
+    "name": "Star Renegades"
+  },
+  "starbound": {
+    "category": "game_crop",
+    "name": "Starbound"
+  },
+  "stardew-valley": {
+    "category": "game_crop",
+    "name": "Stardew Valley"
+  },
+  "steamworld-dig": {
+    "category": "game_crop",
+    "name": "SteamWorld Dig"
+  },
+  "super-metroid-redesign-dataset": {
+    "category": "sprite_sheet",
+    "name": "Super Metroid Redesign"
+  },
+  "synthetik-legion-rising": {
+    "category": "game_crop",
+    "name": "SYNTHETIK: Legion Rising"
+  },
+  "terra-invicta": {
+    "category": "game_crop",
+    "name": "Terra Invicta"
+  },
+  "terraria": {
+    "category": "game_crop",
+    "name": "Terraria"
+  },
+  "tevi": {
+    "category": "game_crop",
+    "name": "TEVI"
+  },
+  "the-last-federation": {
+    "category": "game_crop",
+    "name": "The Last Federation"
+  },
+  "the-library-of-babel": {
+    "category": "game_crop",
+    "name": "The Library of Babel"
+  },
+  "the-messenger": {
+    "category": "game_crop",
+    "name": "The Messenger"
+  },
+  "the-vagrant": {
+    "category": "game_crop",
+    "name": "The Vagrant"
+  },
+  "towerfall": {
+    "category": "game_crop",
+    "name": "TowerFall"
+  },
+  "trappist": {
+    "category": "game_crop",
+    "name": "Trappist"
+  },
+  "turbo-kid": {
+    "category": "game_crop",
+    "name": "Turbo Kid"
+  },
+  "turing-complete": {
+    "category": "game_crop",
+    "name": "Turing Complete"
+  },
+  "tyranny": {
+    "category": "game_crop",
+    "name": "Tyranny"
+  },
+  "until-we-die": {
+    "category": "game_crop",
+    "name": "Until We Die"
+  },
+  "wayward": {
+    "category": "game_crop",
+    "name": "Wayward"
+  },
+  "webbed": {
+    "category": "game_crop",
+    "name": "Webbed"
+  },
+  "within-a-dead-city": {
+    "category": "game_crop",
+    "name": "Within a Dead City"
+  }
+}

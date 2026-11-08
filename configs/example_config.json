@@ -1,0 +1,104 @@
+{
+  "input": {
+    "input_dir": "/workspace/pixel-art",
+    "extensions": [
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".webp"
+    ],
+    "recursive": true,
+    "include_sources": null,
+    "exclude_sources": []
+  },
+  "model": {
+    "backend": "vllm",
+    "model_path": "fancyfeast/llama-joycaption-beta-one-hf-llava",
+    "revision": null,
+    "dtype": "bfloat16",
+    "hf": {
+      "quantization": "nf4",
+      "device_map": 0
+    },
+    "vllm": {
+      "max_model_len": 4096,
+      "gpu_memory_utilization": 0.9,
+      "max_num_seqs": 128,
+      "enable_prefix_caching": true,
+      "enforce_eager": false
+    }
+  },
+  "generation": {
+    "enabled_caption_types": [
+      "long",
+      "short"
+    ],
+    "caption_types": {
+      "long": {
+        "instruction": "Write a long detailed description for this image.",
+        "max_new_tokens": 512,
+        "temperature": 0.6,
+        "top_p": 0.9,
+        "top_k": null
+      },
+      "short": {
+        "instruction": "Write a short description for this image in one or two sentences.",
+        "max_new_tokens": 96,
+        "temperature": 0.6,
+        "top_p": 0.9,
+        "top_k": null
+      },
+      "tags": {
+        "instruction": "Write a list of Booru-like tags for this image.",
+        "max_new_tokens": 160,
+        "temperature": 0.6,
+        "top_p": 0.9,
+        "top_k": null
+      },
+      "sd_prompt": {
+        "instruction": "Write a stable diffusion prompt for this image.",
+        "max_new_tokens": 160,
+        "temperature": 0.6,
+        "top_p": 0.9,
+        "top_k": null
+      }
+    }
+  },
+  "prompts": {
+    "system": "You are a helpful image captioner.",
+    "template": "{instruction} {context} {constraints}",
+    "constraints": "Do not mention the image resolution.",
+    "default_category": "mixed_collection",
+    "categories": {
+      "game_crop": "This image is a crop from a screenshot of the video game {source_name}.",
+      "sprite_sheet": "This image is a sprite sheet or a collection of video game assets.",
+      "ai_pixel_art": "This image is AI-generated pixel art.",
+      "mixed_collection": ""
+    },
+    "sources_file": "configs/sources.json"
+  },
+  "quality": {
+    "max_retries": 1,
+    "repeat_ngram_threshold": 4,
+    "min_compression_ratio": 0.25
+  },
+  "output": {
+    "output_dir": "/workspace/captions",
+    "write_txt": false,
+    "resume": true,
+    "fsync_every": 100,
+    "qa_sample": 100
+  },
+  "runtime": {
+    "shard": "0/1",
+    "batch_size": 64,
+    "num_workers": 4,
+    "prefetch": 64,
+    "max_images": null,
+    "seed": 0,
+    "log_every_s": 30,
+    "log_level": "INFO",
+    "log_file": null,
+    "gpu_hourly_cost": null
+  }
+}

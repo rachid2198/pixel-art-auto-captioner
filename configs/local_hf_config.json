@@ -1,0 +1,33 @@
+{
+  "input": {
+    "input_dir": "./input"
+  },
+  "model": {
+    "backend": "hf",
+    "model_path": "./Models",
+    "revision": null,
+    "dtype": "bfloat16",
+    "hf": {
+      "quantization": "nf4",
+      "device_map": 0
+    }
+  },
+  "output": {
+    "output_dir": "./output",
+    "write_txt": false,
+    "resume": true,
+    "qa_sample": 20
+  },
+  "runtime": {
+    "shard": "0/1",
+    "batch_size": 4,
+    "num_workers": 2,
+    "prefetch": 8,
+    "max_images": null,
+    "seed": 0,
+    "log_every_s": 10,
+    "log_level": "INFO",
+    "log_file": null,
+    "gpu_hourly_cost": null
+  }
+}
