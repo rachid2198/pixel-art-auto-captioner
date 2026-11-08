@@ -1,0 +1,2 @@
+# Test dependency (SPEC §15) = pyproject.toml extra "dev".
+pytest>=8

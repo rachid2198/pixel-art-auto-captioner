@@ -57,9 +57,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, BinaryIO, NoReturn
 
-# Until the package is installed (pyproject.toml, step 13), make ``src/``
-# importable when the script is run from a checkout. Harmless once installed:
-# the import succeeds and ``sys.path`` is left alone.
+# Fallback for running the script from a checkout where the package is not
+# installed (README: ``pip install -e .``). Once installed (pyproject.toml,
+# SPEC §15) the import succeeds and ``sys.path`` is left alone.
 try:  # pragma: no cover - depends on how the package is installed
     import pixel_art_auto_captioner  # noqa: F401
 except ImportError:  # pragma: no cover

@@ -1,15 +1,13 @@
-"""Shared test fixtures for the pixel-art-auto-captioner test suite."""
+"""Shared test fixtures for the pixel-art-auto-captioner test suite.
 
-import sys
+The tests import the installed package (``pip install -e ".[dev]"`` from the
+repo root, SPEC §15 / AGENTS.md §5); nothing here edits ``sys.path``.
+"""
+
 from pathlib import Path
 
 import PIL.Image
 import pytest
-
-# Ensure the package is importable when running tests from the project root.
-_src = Path(__file__).resolve().parent.parent / "src"
-if str(_src) not in sys.path:
-    sys.path.insert(0, str(_src))
 
 
 def pytest_configure(config):

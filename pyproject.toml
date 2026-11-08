@@ -1,0 +1,38 @@
+# Package metadata (SPEC v1.1 §15, proposal P2 / Q17).
+# Install from the repo root:  pip install -e ".[local,dev]"   (local HF backend + tests)
+# torch is NOT listed here: install it first with the CUDA build from the
+# README. The cloud Docker image (docker/Dockerfile) uses the vLLM base image's
+# torch/transformers/vllm and installs this package with --no-deps.
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pixel-art-auto-captioner"
+dynamic = ["version"]
+description = "Caption a pixel-art video-game image dataset with JoyCaption (vLLM in the cloud, HF transformers locally)."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+# = requirements-local.txt (HF backend; torch is installed separately, see README)
+local = [
+    "transformers==5.12.*",
+    "accelerate==1.13.*",
+    "bitsandbytes==0.49.*",
+]
+# = requirements-dev.txt
+dev = [
+    "pytest>=8",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "pixel_art_auto_captioner.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pixel_art_auto_captioner*"]

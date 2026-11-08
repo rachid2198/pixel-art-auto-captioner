@@ -1,0 +1,6 @@
+# Local HF backend (SPEC §15) = pyproject.toml extra "local".
+# torch is NOT listed: install it first with the CUDA build from the README
+# (currently torch 2.12.0+cu130 locally), then:  pip install -r requirements-local.txt
+transformers==5.12.*
+accelerate==1.13.*
+bitsandbytes==0.49.*
