@@ -16,8 +16,8 @@ Legend: ✅ done · ▶ next · ⬜ pending · 🔁 done in v1.0, needs rework f
 | v1.1 review ("grill") with the user | ✅ Done 2026-11-06. 17 decisions, see §3. |
 | SPEC / AGENTS / TODO rewrite | ✅ Done 2026-11-06. SPEC v1.1 approved by the user 2026-11-07 (incl. D1–D11). |
 | v1.1 implementation (steps 1–13) | ✅ Done 2026-11-08 (overnight batch run). 1520 passed, 10 skipped (GPU guards). Last commit `8a1eb2b` on `origin/v1.1`. |
-| Post-implementation review with the user | ✅ Done 2026-11-13–15. Decisions R1–R10 (SPEC §0.4), log in §3.1. |
-| v1.2 changes (steps C1–C9) | ▶ C1 next. Implemented in **Claude Code** on the user's PC (Windows-native tests), see §2.1. |
+| Post-implementation review with the user | ✅ Done 2026-11-13–21. Decisions R1–R13 (SPEC §0.4), log in §3.1. |
+| v1.2 changes (steps C1–C10) | ▶ C1 next. Implemented in **Claude Code** on the user's PC (Windows-native tests), see §2.1. |
 | GPU validation (steps 14–16) | ⬜ after C9. |
 
 ### Overnight log
@@ -50,7 +50,7 @@ Batch run of steps 2–13 (approved 2026-11-07). One commit per step on `origin/
   - Review the per-step **Deviations** in the step notes below (none change a public interface without being recorded).
   - `REVIEW.md` was not touched; its 2026-07-16 runner review can now be closed (step 10 notes).
 - **Not verifiable here (step 14/15):** real JoyCaption load (HF NF4 + vLLM 0.33.0 API), Docker image build, RunPod upload/unpack.
-- **Next (superseded 2026-11-21: steps C1–C9 come first, §2.1). Original note:** on the PC, after syncing: `.\.env\Scripts\python.exe -m pip install -e ".[local,dev]"`, then `.\.env\Scripts\python.exe -m pytest tests -q`, then the local smoke test.
+- **Next (superseded 2026-11-21: steps C1–C10 come first, §2.1). Original note:** on the PC, after syncing: `.\.env\Scripts\python.exe -m pip install -e ".[local,dev]"`, then `.\.env\Scripts\python.exe -m pytest tests -q`, then the local smoke test.
 - **Sync your PC with GitHub** (the PC holds the same content uncommitted; `tests/test_model.py` is removed in git but still on the PC):
 
   ```text
@@ -87,7 +87,7 @@ Each step: code + tests → CPU suite green → update this table → report to 
 | 15 | ⬜ 👤 | RunPod pilot (**Secure Cloud**, CUDA 13.0 filter, R1): pack (with the R9 exclusions) + upload, ~500 images across categories, RTX 4090 vs L40S; report img/h and $/1k images; QA page review; tune prompts (incl. the `midjourney-dataset` context); check whether RunPod restarts the container after exit | — | manual | — |
 | 16 | ⬜ 👤 | Full run with the chosen caption types and GPU, within the $50–$200 budget | — | manual | — |
 
-Dependencies: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8/9 → 10 → 11 → 12 → 13 → C1…C9 (§2.1) → 14 → 15 → 16. Steps 8 and 9 are independent of each other.
+Dependencies: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8/9 → 10 → 11 → 12 → 13 → C1…C10 (§2.1, order there) → 14 → 15 → 16. Steps 8 and 9 are independent of each other.
 
 ### 2.1 v1.2 changes (decided 2026-11-13–15, SPEC §0.4)
 
@@ -97,15 +97,16 @@ Implemented in Claude Code on the user's PC, one commit per step on `v1.1`, same
 |---|---|---|---|---|
 | C1 | ▶ | **Exit code 3 (R2).** Summary key `captions_load_failed`; `exit_code_for` ignores load-failure captions; alarm when every planned image failed to load and `images_planned > runtime.load_failure_alarm` (default 50, new config key + validation) (§7.3, §9, §10.1) | `test_runner.py`, `test_cli.py`, `test_config.py`: one corrupt image left on resume → exit 0; all images corrupt, 51 planned → exit 3; 50 planned → exit 0; model returns only errors → exit 3 | — |
 | C2 | ⬜ | **Revision pin + resolved revision (R4, P4).** `model.revision` = `ebf414ea497a020da0f82df3913e5b6cb8e9663a` in `example_config.json` and `local_hf_config.json` (local `./Models` copy: leave `null` if it is not an HF snapshot, and say so); `describe()` of both backends adds `resolved_revision` (§6.2) | `test_joycaption_hf.py`, `test_joycaption_vllm.py` with fakes: snapshot path → hash; plain folder → `None`; lookup error → WARNING, load still succeeds | — |
-| C3 | ⬜ | **`.gitattributes` (R5, P5):** `*.sh text eol=lf`; `git update-index --chmod=+x scripts/unpack_dataset.sh`; `git add --renormalize .` and check `git status` is clean afterwards (on 2026-11-21 the PC copy showed 47 files changed only by CRLF line endings, written outside git). Ask before extending it beyond `*.sh` (see P9) | `test_pack_dataset.py` (script has no `\r`) | — |
+| C3 | ⬜ | **`.gitattributes` (R5, R11; P5, P9):** `* text=auto` and `*.sh text eol=lf`; `git update-index --chmod=+x scripts/unpack_dataset.sh`; `git add --renormalize .` and check `git status` is clean afterwards (on 2026-11-21 the PC copy showed 47 files changed only by CRLF line endings, written outside git) | `test_pack_dataset.py` (script has no `\r`) | — |
 | C4 | ⬜ | **Remove `prompts.system` (R6)** from `DEFAULT_CONFIG`, both configs and README; validation rejects it with a clear message; both backends report `system_prompt` in `describe()` (§6.2, §9.2) | `test_config.py`, backend tests | — |
+| C10 | ⬜ | **Config paths (R12, R13)** — do right after C4. `load_config` resolves a relative `prompts.sources_file` from a config file against that file's directory; both configs set `"sources_file": "sources.json"`; `DEFAULT_CONFIG` `input_dir`/`output_dir` → `null`, validation requires both with a message naming the CLI flag; README and Dockerfile comments updated (the Docker `WORKDIR /app` note about `sources.json` is no longer needed) (§9.1–9.3) | `test_config.py`, `test_cli.py`: config in another folder + launch from an unrelated cwd finds `sources.json`; absolute path unchanged; no `--config` → cwd-relative; missing `input_dir` / `output_dir` → one error each naming the flag; CLI override of either works | — |
 | C5 | ⬜ | **Prompt-change WARNING against current prompts (R7).** `ResumeIndex.prompt_mismatches(current_prompts)`; the runner renders the prompts for planned (caption type, source) pairs and logs one WARNING per mismatch with counts; replaces the step 6 "≥ 2 prompts among records" check (§8.4) | `test_export_utils.py`, `test_runner.py`: first resume after a prompt edit warns with the right count; unchanged prompts → no warning; game_crop sources with different names → no false warning | — |
 | C6 | ⬜ | **`sources.json` + exclusions (R8, R9):** apply the 2026-11-15 answers (§3.1); remove `ai-war`, `distant-worlds`, `destroy-all-humans`, `icarus`; put the 41-source `exclude_sources` list (SPEC §9.2) in both configs; README `pack_dataset.py` example passes the same list | `test_cli.py` / config tests: every folder of the 2026-11-15 count is either mapped or excluded; `--dry_run` totals match §3.1 on a synthetic tree | — |
 | C7 | ⬜ | **GHCR image build (R3, P6):** `.github/workflows/docker.yml` (tag `v*` + `workflow_dispatch`; disk cleanup; `GIT_SHA` build arg; push `ghcr.io/rachid2198/pixel-art-captioner:<tag>`); Dockerfile `ARG GIT_SHA`; manifest falls back to `PIXEL_ART_CAPTIONER_GIT_SHA` (§11.2) | `test_runner.py` (env fallback), `test_packaging.py` (workflow YAML parses, tag pattern, build arg); real build = first tag push (👤 make the package public once) | — |
 | C8 | ⬜ | **README for Secure Cloud (R1):** Secure Cloud + network volume, CUDA filter 13.0, data center with both 4090 and L40S, GHCR image name, `--gpu_hourly_cost` 0.89 / 1.09, budget arithmetic, the container-restart pilot check (§11.3, §11.4) | docs only | — |
 | C9 | ⬜ | **Windows-native re-verification.** Full CPU suite natively on the PC; list and fix any Windows-only failures or skips the cloud runs could not see (paths, CRLF, bash tests, `os.walk` on NTFS, file locking); confirm `--dry_run` on the real dataset prints 781,686 images in 66 sources | full suite | — |
 
-Dependencies: C1 … C9 in order (C3 before C7/C8 so committed files are LF), then step 14.
+Order: C1 → C2 → C3 → C4 → C10 → C5 → C6 → C7 → C8 → C9, then step 14. (C10 was added after C1–C9 were numbered; it belongs with the config work of C4.)
 
 ### Step 1 notes (2026-11-07)
 
@@ -463,6 +464,9 @@ Dependencies: C1 … C9 in order (C3 before C7/C8 so committed files are LF), th
 | R7 | Resume prompt warning | Compare with current prompts; warn at the first resume after a change. |
 | R8 | `sources.json` | Approved with these answers: `halcyon-6` "Halcyon 6: Starbase Commander"; `sea-start` "Sea of Stars"; `dig-deep-in-galaxies` "DIG - Deep In Galaxies"; `dogolrax` "Dogolrax"; `last-command` "Last Command"; `mistward` "Mistward"; `trappist` "Trappist"; `within-a-dead-city` "Within a Dead City"; `the-library-of-babel` game_crop "The Library of Babel"; `metroid-fusion-dataset` and `super-metroid-redesign-dataset` → **game_crop** ("Metroid Fusion", "Super Metroid Redesign"); the four Pinterest/`pixel-art-dataset` folders stay mixed_collection; `midjourney-dataset` stays ai_pixel_art (context wording → pilot). Entries `ai-war`, `distant-worlds`, `destroy-all-humans`, `icarus` removed: the user deletes those folders himself. |
 | R9 | Source exclusions | Dataset counted 2026-11-15: **918,760 images in 107 folders**. Excluded 41 sources (137,074 images): 36 not pixel art (`fallout 2` alone 88,417), plus `trappist`, `synthetik-legion-rising`, `dave-the-diver`, `pinterest-dataset-video-game`, `pinterest-dataset-game`. Kept `ghost-1.0`, `dead-cells`. **Remaining: 781,686 images, 66 sources** (63 games = 576,758; collections: `pinterest-pixel-art-2023-07-01-v3` 200,314, `midjourney-dataset` 3,978, `pixel-art-dataset` 636). Full list in SPEC §9.2. |
+| R11 | Line endings (P9) | Accepted 2026-11-21: `* text=auto` (+ `*.sh text eol=lf`). |
+| R12 | `sources_file` location | Accepted 2026-11-21: relative `sources_file` resolved next to its config file; configs use `"sources.json"`. |
+| R13 | Default paths | Accepted 2026-11-21: `input_dir` / `output_dir` default `null` and required. |
 | R10 | Near-duplicate filter | Separate local project `pixel-art-dedup` (F:\Research\Code\pixel-art-dedup), using the existing `*_clip_h.msgpack` vectors (1280-d, Kandinsky 2.2 prior image encoder, ViT-bigG/14 size; unnormalised). A global pass fits on the PC (~2 GB fp16). Design grill continues there. |
 
 ## 4. v1.0 bugs found in review (all scheduled for fix, Q11)
@@ -496,7 +500,7 @@ Also found: importing `captioning.base` pulls in torch via `captioning/__init__.
 | P6 | (revised) Build the Docker image with GitHub Actions and publish it on GHCR instead of building at home | ✅ Accepted 2026-11-14 (R3) → step C7 |
 | P7 | Near-duplicate / quality filtering of the dataset | ➡ Moved to the separate `pixel-art-dedup` project (R10) |
 | P8 | Community Cloud without a network volume (download data at pod start, sync captions off regularly) | ⏸ Fallback, write up only if the pilot shows Secure Cloud over budget (R1) |
-| P9 | Extend `.gitattributes` to `* text=auto eol=lf` so no file gets CRLF in a Windows checkout | ⏳ Suggested 2026-11-21 (47 files on the PC had CRLF-only changes), awaiting the user's answer |
+| P9 | `.gitattributes` `* text=auto` so the repo always stores LF and CRLF-only edits never show as changes | ✅ Accepted 2026-11-21 (R11) → step C3 |
 
 New proposals go here first (motivation, cost, alternatives), one at a time, and need the user's approval (AGENTS.md §0).
 
@@ -506,15 +510,12 @@ New proposals go here first (motivation, cost, alternatives), one at a time, and
 
 | Item | When |
 |---|---|
-| Proposal P9 (`* text=auto eol=lf`) | Before C3 |
-| Default `prompts.sources_file` relative to the current directory (default config works only from the repo root): keep, or resolve relative to the config file | Before step 14 |
-| `DEFAULT_CONFIG` example paths `/data/pixel-art`, `/data/captions`: keep or make `null` | Before step 14 |
 | Final prompt wording; whether game-name injection helps or causes hallucinated details; `midjourney-dataset` context sentence | Step 15 |
 | Pilot GPU choice (4090 vs L40S) by measured cost; does RunPod restart the container after exit | Step 15 |
 | Caption types for the full run | Step 16 |
 | How the `pixel-art-dedup` keep-list feeds the captioner (proposal after the dedup design) | Before step 16 |
 
-Resolved 2026-11-13–15: P4, P5, `sources.json` approval, the resume prompt-change warning and `prompts.system` (R4–R8).
+Resolved 2026-11-13–21: P4, P5, P9, `sources.json` approval, the resume prompt-change warning, `prompts.system`, `sources_file` location and default paths (R4–R8, R11–R13).
 
 ---
 

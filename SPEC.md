@@ -2,7 +2,7 @@
 
 **Version:** 1.2
 **Date:** 2026-11-21
-**Status:** v1.1 approved by the user on 2026-11-07 (Q1–Q17, D1–D11) and implemented (TODO steps 1–13). v1.2 adds the decisions R1–R10 of the 2026-11-13–15 review (§0.4), all approved by the user; their code changes are TODO steps C1–C9.
+**Status:** v1.1 approved by the user on 2026-11-07 (Q1–Q17, D1–D11) and implemented (TODO steps 1–13). v1.2 adds the decisions R1–R13 of the 2026-11-13–21 review (§0.4), all approved by the user; their code changes are TODO steps C1–C10.
 **Supersedes:** v1.1 (2026-11-06), v1.0 (2026-06-16)
 
 ---
@@ -87,7 +87,7 @@ These are not new features. They are the concrete mechanics needed to implement 
 | B9 `requirements.txt` replaces PyPI with the CUDA 13 index; version floors too low | §15. |
 | B10 Unclosed file handles; `+00:00` timestamps; truncation not flagged; no CPU tests for model code | §4.4, §8.1, §5.3, §13. |
 
-### 0.4 Decisions from the 2026-11-13–15 review (v1.2)
+### 0.4 Decisions from the 2026-11-13–21 review (v1.2)
 
 Raised by the post-implementation review of steps 1–13 and decided with the user. Each row names the TODO step that implements it.
 
@@ -102,6 +102,9 @@ Raised by the post-implementation review of steps 1–13 and decided with the us
 | R7 | **The resume prompt-change WARNING compares existing records with the current prompts.** The runner passes its rendered prompts to the resume index, which warns at the **first** resume after a change, with counts per (caption type, source). Old records still count as complete. | §8.4 | C5 |
 | R8 | **`configs/sources.json` approved** with the user's answers of 2026-11-15 (titles, categories; entries for the four deleted folders removed). | §5.1 | C6 |
 | R9 | **41 sources are excluded** through `input.exclude_sources` in the example configs: not pixel art, or unwanted collections. The dataset itself is not changed. | §1.2, §9.2 | C6 |
+| R11 | **`.gitattributes` also normalises every text file** (proposal P9): `* text=auto`, so the repository always stores LF and CRLF-only differences written by Windows tools never show as changes. `*.sh text eol=lf` (R5) keeps scripts LF on disk. | §14 | C3 |
+| R12 | **A relative `prompts.sources_file` is resolved relative to the config file that sets it**, so a config works from any launch folder; the configs use `"sources.json"`. Without `--config` (built-in defaults only) it stays relative to the launch folder. `input_dir` and `output_dir` stay relative to the launch folder. | §9.1, §9.2 | C10 |
+| R13 | **`input.input_dir` and `output.output_dir` have no default** (`null` in `DEFAULT_CONFIG`) and are required: validation fails with e.g. `input.input_dir is required (set it in the config or pass --input_dir)`. Prevents silent writes to `\data\captions` at a Windows drive root. | §9.2, §9.3 | C10 |
 | R10 | **Near-duplicate filtering is a separate, local-only project** (`pixel-art-dedup`), not part of this repository. How its result feeds the captioner (e.g. a keep-list) is decided in that project's design and comes back here as a proposal. | §1.4, §17 | — |
 
 ---
@@ -567,11 +570,13 @@ def load_config(path: Path | None, overrides: dict) -> dict      # deep-merge
 def validate_config(cfg: dict) -> None                            # raises ValueError with all problems listed
 ```
 
+`load_config` resolves a relative `prompts.sources_file` taken from the config file against that file's directory before merging the CLI overrides (R12). `DEFAULT_CONFIG` sets `input.input_dir` and `output.output_dir` to `null` (R13); the example below shows the RunPod values that `configs/example_config.json` sets.
+
 ### 9.2 Config file (`configs/example_config.json`)
 
 ```json
 {
-  "input":   { "input_dir": "/data/pixel-art", "extensions": [".png", ".jpg", ".jpeg", ".webp"],
+  "input":   { "input_dir": "/workspace/pixel-art", "extensions": [".png", ".jpg", ".jpeg", ".webp"],
                "recursive": true, "include_sources": null,
                "exclude_sources": ["fallout 2", "mark-of-the-ninja", "...", "pinterest-dataset-game"] },
   "model":   { "backend": "vllm",
@@ -603,10 +608,10 @@ def validate_config(cfg: dict) -> None                            # raises Value
       "ai_pixel_art":     "This image is AI-generated pixel art.",
       "mixed_collection": ""
     },
-    "sources_file": "configs/sources.json"
+    "sources_file": "sources.json"
   },
   "quality": { "max_retries": 1, "repeat_ngram_threshold": 4, "min_compression_ratio": 0.25 },
-  "output":  { "output_dir": "/data/captions", "write_txt": false, "resume": true, "fsync_every": 100,
+  "output":  { "output_dir": "/workspace/captions", "write_txt": false, "resume": true, "fsync_every": 100,
                "qa_sample": 100 },
   "runtime": { "shard": "0/1", "batch_size": 64, "num_workers": 4, "prefetch": 64,
                "max_images": null, "seed": 0, "log_every_s": 30, "log_level": "INFO",
@@ -614,7 +619,7 @@ def validate_config(cfg: dict) -> None                            # raises Value
 }
 ```
 
-`configs/sources.json`: `{"celeste": {"category": "game_crop", "name": "Celeste"}, ...}`. Inline `prompts.sources` is also accepted and takes precedence over `sources_file`.
+`configs/sources.json`: `{"celeste": {"category": "game_crop", "name": "Celeste"}, ...}`. A relative `sources_file` is resolved against the directory of the config file that sets it (R12); an absolute path is used as is. Inline `prompts.sources` is also accepted and takes precedence over `sources_file`.
 
 `input.exclude_sources` above is abbreviated; the configs carry the full list of the 41 sources excluded by the user (R9): `fallout 2`, `mark-of-the-ninja`, `tyranny`, `steamworld-dig`, `factorio`, `fallout`, `nine-sols`, `lies-of-p`, `craft-the-world`, `oxygen-not-included`, `darkest-dungeon`, `dustforce`, `a-valley-without-wind`, `hollow-knight`, `barotrauma`, `nom-nom-galaxy`, `lobotomy-corporation`, `apotheon`, `hades`, `rimworld`, `cult-of-the-lamb`, `industries-of-titan`, `the-vagrant`, `metro-last-light`, `turing-complete`, `hardcore-mecha`, `highfleet`, `space-rangers-hd-a-war-apart`, `empires-of-the-undergrowth`, `cavalry-girls`, `dyson-sphere-program`, `the-last-federation`, `aquaria`, `helldivers`, `prey`, `terra-invicta`, `trappist`, `synthetik-legion-rising`, `dave-the-diver`, `pinterest-dataset-video-game`, `pinterest-dataset-game`.
 
@@ -622,7 +627,7 @@ def validate_config(cfg: dict) -> None                            # raises Value
 
 ### 9.3 Validation rules (all reported together)
 
-- `input_dir` exists and is a directory.
+- `input_dir` and `output_dir` are set (R13; no built-in default), and `input_dir` exists and is a directory.
 - `backend ∈ {vllm, hf}`; `dtype ∈ {bfloat16, float16, float32}`; `hf.quantization ∈ {nf4, int8, null}`.
 - `enabled_caption_types` is non-empty and each entry exists in `caption_types`.
 - Every category referenced by `sources` exists in `categories`. `default_category` exists.
@@ -781,7 +786,7 @@ pixel-art-auto-captioner/
 ├── main.py                         # v0 prototype, preserved, never modified
 ├── SPEC.md  AGENTS.md  TODO.md  REVIEW.md  README.md
 ├── pyproject.toml                  # package metadata; `pip install -e .`
-├── .gitattributes                  # *.sh text eol=lf (R5)
+├── .gitattributes                  # * text=auto (R11); *.sh text eol=lf (R5)
 ├── .github/workflows/docker.yml    # builds + pushes the GHCR image on tag v* (R3)
 ├── requirements.txt                # shared runtime (pillow)
 ├── requirements-local.txt          # HF backend (Windows/Linux local)
@@ -854,7 +859,7 @@ Each step: implement → tests green → TODO.md updated → user notified. The 
 | 11 | `run_caption.py` CLI, configs, draft `sources.json` (**user approval**) | No |
 | 12 | `export_txt.py`, `make_qa_page.py`, `pack_dataset.py`, `unpack_dataset.sh` | No |
 | 13 | `pyproject.toml`, requirements split, Dockerfile, README (local + RunPod instructions) | No |
-| C1–C9 | v1.2 changes R1–R9 (§0.4) and a Windows-native re-verification of the suite; see `TODO.md` §2.1 | No |
+| C1–C10 | v1.2 changes R1–R9, R11–R13 (§0.4) and a Windows-native re-verification of the suite; see `TODO.md` §2.1 | No |
 | 14 | Local smoke test on RTX 3060, HF backend, ~20 images (**user runs**) | Yes |
 | 15 | Cloud pilot: ~500 images across categories; measure throughput; review QA page; tune prompts (**user approval**) | Yes |
 | 16 | Full dataset run | Yes |
@@ -868,8 +873,6 @@ Each step: implement → tests green → TODO.md updated → user notified. The 
 | ~~Approve `configs/sources.json`~~ | User | ✅ 2026-11-15 (R8) |
 | `ai_pixel_art` context sentence for `midjourney-dataset` (it also holds AI images of games that are not pixel art; candidate: "This image is AI-generated, in the style of a video game or pixel art.") | User + pilot | Step 15 |
 | Does RunPod restart a container after the CLI exits? Self-stop proposal only if it does (§11.4) | Pilot | Step 15 |
-| Default `prompts.sources_file` is relative to the current directory, so the default config only works when launched from the repo root (error message is clear). Keep, or resolve relative to the config file (needs approval) | User | Before step 14 |
-| `DEFAULT_CONFIG` keeps the example paths `/data/pixel-art` and `/data/captions` although `input_dir` is "required"; make them `null` (needs approval) | User | Before step 14 |
 | How the `pixel-art-dedup` result (keep-list) feeds the captioner (R10) | User | After the dedup design |
 | Final prompt wording per caption type and category; decide whether game-name injection helps or causes hallucination | User + pilot | Step 15 |
 | Pilot GPU decision: RTX 4090 vs L40S, by measured $/1 000 images | User + pilot | Step 15 |

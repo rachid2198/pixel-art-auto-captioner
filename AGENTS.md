@@ -3,7 +3,7 @@
 **Project:** Pixel Art Auto-Captioner
 **Specification:** `SPEC.md` v1.2 (2026-11-21)
 **Progress ledger:** `TODO.md`
-**Applies to:** any coding agent working on this repo (currently Claude; previously Pi/DeepSeek/Qwen).
+**Applies to:** any coding agent working on this repo. From 2026-11-21 the primary agent is **Claude Code running natively on the user's Windows PC** (previously Claude in a cloud Linux sandbox, before that Pi/DeepSeek/Qwen). `CLAUDE.md` imports this file.
 
 ---
 
@@ -27,7 +27,7 @@ The repo and dataset live on the user's Windows machine (`F:\Research\Code\pixel
 - **Change only what the current step needs.** Never modify, move or delete anything else: no dataset files, `main.py`, `.env/`, `Models/`, `input/` or `output/`.
 - **The dataset is read-only.** No pipeline step writes inside `input_dir`.
 - **Ask before any new access** (new folders, installing packages, network, credentials).
-- **Git:** do not commit, branch, push or rewrite history unless the user asks. When asked, use the branch `v1.1` and one commit per TODO step.
+- **Git:** do not commit, branch, push or rewrite history unless the user asks. When asked, use the branch `v1.1`, one commit per TODO step, pushed to `origin v1.1` after the step is green. Before every commit, check that `git status` / `git diff --stat` list only the step's real changes (no CRLF-only noise, no files outside the step).
 - **Excluded sources stay untouched:** the 41 folders in `input.exclude_sources` (SPEC §9.2) are skipped by the pipeline; never delete them, the user curates the dataset himself.
 - Large scans of the dataset (918,760 images + ~2.75M msgpack files in 107 folders) are slow. Use bounded commands (`timeout`, `head`, per-folder sampling) and say so.
 
@@ -38,7 +38,7 @@ The repo and dataset live on the user's Windows machine (`F:\Research\Code\pixel
 1. **Read `TODO.md`.** Work only on the step marked ▶ *next*, and only after all prerequisite steps are ✅. If prior results are missing, ask.
 2. **Re-read the relevant `SPEC.md` sections** before writing code.
 3. **Implement the module and its tests together.** Tests must cover the success paths, the error paths and every item listed for that module in SPEC §13.
-4. **Run the CPU suite.** It must be green with no `torch`, `transformers` or `vllm` installed (use the Linux sandbox or the local `.env`).
+4. **Run the CPU suite natively on Windows** with the local `.env` (`.\.env\Scripts\python.exe -m pytest tests -q`). The suite must also stay green with no `torch`, `transformers` or `vllm` installed: tests may never depend on them (the GitHub image build and any Linux run rely on this).
 5. **Update `TODO.md`:** status, test counts (`N passed, M skipped`), files touched, any **Deviations**, and the next step.
 6. **Report to the user in 3–6 lines** (what changed, test result, anything needing a decision) and wait for the go-ahead before the next step, unless the user has approved a batch of steps.
 
@@ -135,6 +135,10 @@ Same seed + same backend + same versions + same GPU type ≈ same text. vLLM out
 
 `.txt` files are optional exports. Never use their existence to decide what is done.
 
+### 6.9 Windows is not the cloud
+
+Steps 1–13 were tested only in a Linux sandbox. On Windows watch for: text files opened without `encoding="utf-8"` (default cp1252), CRLF written by tools (R11), `\` vs `/` in paths stored on disk (always `as_posix()`), case-insensitive file names hiding collisions, `signal.SIGTERM` handling (Windows delivers Ctrl-C/Ctrl-Break, not SIGTERM), files that cannot be deleted or renamed while open (temp dirs, fsync tests), and bash-only tests that must skip cleanly.
+
 ---
 
 ## 7. Environments
@@ -142,7 +146,8 @@ Same seed + same backend + same versions + same GPU type ≈ same text. vLLM out
 | Where | What | How |
 |---|---|---|
 | Local Windows (RTX 3060) | HF backend, NF4 | `.env` venv: torch 2.12.0+cu130, transformers 5.12, bitsandbytes 0.49.2, accelerate 1.13; `./.env/Scripts/python.exe` |
-| Agent sandbox (Linux, CPU) | CPU test suite | `python3 -m pytest tests -q`; torch/vllm absent by design |
+| Claude Code on the PC | development + CPU test suite | same `.env`; PowerShell; repo `F:\Research\Code\pixel-art-auto-captioner` |
+| GitHub Actions (Linux) | builds the cloud image on tag `v*` | `.github/workflows/docker.yml` (SPEC §11.2) |
 | Cloud GPU | vLLM backend, bf16 | Docker image from `docker/Dockerfile` (SPEC §11.2) |
 
 ---

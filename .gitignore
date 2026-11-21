@@ -43,6 +43,7 @@ input/
 output_prompts/
 output/
 captions/
+Claude outputs/
 
 # Local dataset workspace: keep placeholders, ignore contents
 data/raw/*
