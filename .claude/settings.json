@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "PowerShell(.\\.env\\Scripts\\python.exe -m pytest *)",
+      "PowerShell(.\\.env\\Scripts\\python.exe scripts\\*)",
+      "PowerShell(./.env/Scripts/python.exe -m pytest *)",
+      "PowerShell(./.env/Scripts/python.exe scripts/*)",
+      "Bash(./.env/Scripts/python.exe -m pytest *)",
+      "Bash(./.env/Scripts/python.exe scripts/*)",
+      "PowerShell(git status *)",
+      "PowerShell(git diff *)",
+      "PowerShell(git log *)",
+      "PowerShell(git show *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)"
+    ],
+    "ask": [
+      "PowerShell(git commit *)",
+      "PowerShell(git push *)",
+      "PowerShell(git fetch *)",
+      "PowerShell(git pull *)",
+      "PowerShell(git clone *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(git clone *)",
+      "PowerShell(*pip install *)",
+      "Bash(*pip install *)",
+      "PowerShell(*Invoke-WebRequest *)",
+      "PowerShell(*Invoke-RestMethod *)",
+      "PowerShell(*curl *)",
+      "PowerShell(*wget *)",
+      "Bash(*curl *)",
+      "Bash(*wget *)",
+      "PowerShell(*huggingface-cli *)",
+      "PowerShell(*hf download *)",
+      "PowerShell(gh *)",
+      "Bash(gh *)",
+      "WebFetch",
+      "WebSearch"
+    ],
+    "deny": [
+      "Edit(/.env/**)",
+      "Edit(/Models/**)",
+      "Edit(/main.py)"
+    ]
+  }
+}

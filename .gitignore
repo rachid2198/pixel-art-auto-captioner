@@ -55,6 +55,9 @@ data/processed/*
 data/exports/*
 !data/exports/.gitkeep
 
+# Claude Code machine-specific settings
+.claude/settings.local.json
+
 # Pi local session data
 .pi/sessions/
 

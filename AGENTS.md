@@ -21,7 +21,7 @@
 
 ## 1. Working on the user's computer
 
-The repo and dataset live on the user's Windows machine (`F:\Research\Code\pixel-art-auto-captioner`, `F:\Work\datasets\pixel-art`). When an agent operates there:
+The repo and dataset live on the user's Windows machine (`F:\Research\Code\pixel-art-auto-captioner`, `F:\Work\datasets\pixel-art`). The agent works there directly, in the real checkout (no copies, no file mirroring from a sandbox). Permission rules are in `.claude/settings.json` (shared) and `.claude/settings.local.json` (machine-specific, git-ignored). On the PC:
 
 - **Narrate every step** as it happens (what you are about to read, run or write, and why).
 - **Change only what the current step needs.** Never modify, move or delete anything else: no dataset files, `main.py`, `.env/`, `Models/`, `input/` or `output/`.
@@ -29,7 +29,7 @@ The repo and dataset live on the user's Windows machine (`F:\Research\Code\pixel
 - **Ask before any new access** (new folders, installing packages, network, credentials).
 - **Git:** do not commit, branch, push or rewrite history unless the user asks. When asked, use the branch `v1.1`, one commit per TODO step, pushed to `origin v1.1` after the step is green. Before every commit, check that `git status` / `git diff --stat` list only the step's real changes (no CRLF-only noise, no files outside the step).
 - **Excluded sources stay untouched:** the 41 folders in `input.exclude_sources` (SPEC §9.2) are skipped by the pipeline; never delete them, the user curates the dataset himself.
-- Large scans of the dataset (918,760 images + ~2.75M msgpack files in 107 folders) are slow. Use bounded commands (`timeout`, `head`, per-folder sampling) and say so.
+- Large scans of the dataset (918,760 images + ~2.75M msgpack files in 107 folders) are slow. Use bounded commands (PowerShell `Select-Object -First N`, a tool timeout, per-folder sampling) and say so.
 
 ---
 
@@ -146,7 +146,7 @@ Steps 1–13 were tested only in a Linux sandbox. On Windows watch for: text fil
 | Where | What | How |
 |---|---|---|
 | Local Windows (RTX 3060) | HF backend, NF4 | `.env` venv: torch 2.12.0+cu130, transformers 5.12, bitsandbytes 0.49.2, accelerate 1.13; `./.env/Scripts/python.exe` |
-| Claude Code on the PC | development + CPU test suite | same `.env`; PowerShell; repo `F:\Research\Code\pixel-art-auto-captioner` |
+| Claude Code on the PC | development + CPU and GPU-gated test suites, run natively | same `.env`; PowerShell; repo `F:\Research\Code\pixel-art-auto-captioner`; commands in `CLAUDE.md` |
 | GitHub Actions (Linux) | builds the cloud image on tag `v*` | `.github/workflows/docker.yml` (SPEC §11.2) |
 | Cloud GPU | vLLM backend, bf16 | Docker image from `docker/Dockerfile` (SPEC §11.2) |
 
