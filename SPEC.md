@@ -1,9 +1,9 @@
 # SPECIFICATION — Pixel Art Auto-Captioner
 
-**Version:** 1.1
-**Date:** 2026-11-06
-**Status:** Approved by the user on 2026-11-07 (decisions Q1–Q17 and derived choices D1–D11). Ready for implementation.
-**Supersedes:** v1.0 (2026-06-16)
+**Version:** 1.2
+**Date:** 2026-11-21
+**Status:** v1.1 approved by the user on 2026-11-07 (Q1–Q17, D1–D11) and implemented (TODO steps 1–13). v1.2 adds the decisions R1–R10 of the 2026-11-13–15 review (§0.4), all approved by the user; their code changes are TODO steps C1–C9.
+**Supersedes:** v1.1 (2026-11-06), v1.0 (2026-06-16)
 
 ---
 
@@ -87,21 +87,39 @@ These are not new features. They are the concrete mechanics needed to implement 
 | B9 `requirements.txt` replaces PyPI with the CUDA 13 index; version floors too low | §15. |
 | B10 Unclosed file handles; `+00:00` timestamps; truncation not flagged; no CPU tests for model code | §4.4, §8.1, §5.3, §13. |
 
+### 0.4 Decisions from the 2026-11-13–15 review (v1.2)
+
+Raised by the post-implementation review of steps 1–13 and decided with the user. Each row names the TODO step that implements it.
+
+| # | Decision | Effect on spec | TODO |
+|---|----------|----------------|------|
+| R1 | **RunPod Secure Cloud with a network volume** for the pilot (network volumes exist only on Secure Cloud). Community Cloud without a volume is a fallback, written up as a proposal only if the pilot's measured cost puts the full run over budget. **Keep vLLM 0.33.0** (CUDA 13.0 only); pods are deployed with RunPod's CUDA filter set to 13.0. Replaces the Community Cloud part of Q14. | §11.3, §11.4 | C8 |
+| R2 | **Exit code 3 counts only captions that reached the model.** Captions lost to image load failures stay `failed` in the summary and in `failures/`, and are retried on the next run, but do not trigger exit 3. Guard: exit 3 also when **every** planned image failed to load and more than `runtime.load_failure_alarm` (default 50) images were planned (e.g. a broken mount). | §7.3, §10.1 | C1 |
+| R3 | **The Docker image is built by GitHub Actions** (replaces building at home). Pushing a tag `v*` builds `docker/Dockerfile` on GitHub's runners and pushes `ghcr.io/rachid2198/pixel-art-captioner:<tag>`. The package is made public once by the user. The workflow passes the commit hash as a build argument so the manifest's `git_sha` is set inside the image. Accepted as proposal P6 (revised). | §11.2, §14 | C7 |
+| R4 | **Pin the model revision and record the resolved one** (proposal P4, option "both"). The example configs set `model.revision` to `ebf414ea497a020da0f82df3913e5b6cb8e9663a` (the repo's `main` on 2026-11-14). Each backend's `describe()` adds `resolved_revision`: the commit hash actually loaded, read from the Hugging Face cache; `null` for a plain local folder with no commit information. | §6.1–6.3, §9.2 | C2 |
+| R5 | **`.gitattributes`** with `*.sh text eol=lf`, and `scripts/unpack_dataset.sh` committed as executable (proposal P5). The README `sed` workaround stays as a fallback. | §14 | C3 |
+| R6 | **`prompts.system` is removed** from the config, defaults and validation. The system prompt stays the fixed JoyCaption constant `"You are a helpful image captioner."` and is recorded as `system_prompt` in each backend's `describe()`. | §5.1, §6.2, §6.3, §9.2 | C4 |
+| R7 | **The resume prompt-change WARNING compares existing records with the current prompts.** The runner passes its rendered prompts to the resume index, which warns at the **first** resume after a change, with counts per (caption type, source). Old records still count as complete. | §8.4 | C5 |
+| R8 | **`configs/sources.json` approved** with the user's answers of 2026-11-15 (titles, categories; entries for the four deleted folders removed). | §5.1 | C6 |
+| R9 | **41 sources are excluded** through `input.exclude_sources` in the example configs: not pixel art, or unwanted collections. The dataset itself is not changed. | §1.2, §9.2 | C6 |
+| R10 | **Near-duplicate filtering is a separate, local-only project** (`pixel-art-dedup`), not part of this repository. How its result feeds the captioner (e.g. a keep-list) is decided in that project's design and comes back here as a proposal. | §1.4, §17 | — |
+
 ---
 
 ## 1. Project Overview
 
 ### 1.1 Purpose
 
-Caption a large (≥ 280k images, 110+ source folders) dataset of mostly pixel-art video-game imagery for research use. The captions will feed a future, not-yet-chosen generative-model training setup. Captions are produced with **JoyCaption Beta One** (`fancyfeast/llama-joycaption-beta-one-hf-llava`, LLaVA architecture: Llama 3.1 8B + SigLIP2 so400m @ 384px).
+Caption a large (918,760 images in 107 source folders; 781,686 in 66 sources after the R9 exclusions) dataset of mostly pixel-art video-game imagery for research use. The captions will feed a future, not-yet-chosen generative-model training setup. Captions are produced with **JoyCaption Beta One** (`fancyfeast/llama-joycaption-beta-one-hf-llava`, LLaVA architecture: Llama 3.1 8B + SigLIP2 so400m @ 384px).
 
-### 1.2 Dataset facts (observed 2026-11-06)
+### 1.2 Dataset facts (observed 2026-11-06, counted 2026-11-15)
 
 - Layout: `<dataset_root>/<source>/<NNNN>/<NNNNNN>.jpg`, where `<source>` is a game name (e.g. `celeste`, `stardew-valley`) or a collection (`pinterest-pixel-art-2023-07-01-v3`, `midjourney-dataset`, `pixel-art-dataset`, …).
 - Images: RGB JPEG, 512×512 (crops of screenshots, sprite sheets, AI-generated pixel art).
 - Each image sits next to legacy `*_clip_h.msgpack` / `*_vae_latent_{64,256}.msgpack` files (about 3 per image). These **are not inputs** and must be ignored cheaply by discovery.
 - File stems repeat across folders (`000001.jpg` exists in many sources). The **relative path is the only unique key**.
-- Not all sources are pixel art (e.g. `hades`, `prey`, `lies-of-p`, `fallout`). Category prompts (§5.1) describe each source neutrally. Deciding which sources to keep in the dataset is out of scope for this pipeline.
+- Counts (2026-11-15): 918,760 images in 107 top-level folders, 2,752,670 `.msgpack` files. The largest sources are `pinterest-pixel-art-2023-07-01-v3` (200,314), `crosscode` (128,346), `sea-start` (120,514) and `celeste` (52,009).
+- Not all sources are pixel art. The 41 sources the user excluded (R9; 137,074 images) are listed in `input.exclude_sources` of `configs/example_config.json`. Category prompts (§5.1) describe each remaining source neutrally. Curating the dataset itself (deleting folders, deduplication) is out of scope for this pipeline (R10).
 
 ### 1.3 Guiding principles
 
@@ -122,7 +140,8 @@ Caption a large (≥ 280k images, 110+ source folders) dataset of mostly pixel-a
 | JSONL output; optional / exported `.txt` | Training manifests for a specific trainer |
 | Resume, sharding, per-image seeds, quality flags, retries | Caption rewriting or cleanup |
 | QA HTML spot-check page | Interactive GUI / web app |
-| Docker image for cloud; RunPod launch notes | Provider API automation (creating/stopping pods by script) |
+| Docker image for cloud (built by GitHub Actions); RunPod launch notes | Provider API automation (creating/stopping pods by script) |
+| | Near-duplicate / quality filtering (separate project, R10) |
 | JPG-only tar packing for upload | Dataset hosting or versioning |
 
 ---
@@ -374,7 +393,8 @@ class CaptionModel(ABC):
         """Convenience wrapper: caption_batch([request])[0]."""
 
     def describe(self) -> dict:
-        """Versions & settings for the run manifest (model_path, revision, dtype, library versions)."""
+        """Versions & settings for the run manifest (model_path, revision, resolved_revision, dtype,
+        system_prompt, library versions)."""
 ```
 
 Contract:
@@ -411,7 +431,9 @@ Behaviour:
 5. Trim prompt tokens and decode with `skip_special_tokens=True, clean_up_tokenization_spaces=False`, then `.strip()`. `finish_reason = "length"` if `num_output_tokens >= max_new_tokens` and the last token is not EOS, else `"stop"`.
 6. Exceptions for one request become an error result. `torch.cuda.OutOfMemoryError` re-raises (systemic).
 
-System prompt: `"You are a helpful image captioner."` (unchanged from `main.py`).
+System prompt: `"You are a helpful image captioner."` (unchanged from `main.py`). It is a fixed constant, not configurable (R6), and is recorded as `system_prompt` in `describe()`.
+
+`describe()` also reports `resolved_revision` (R4): the commit hash of the snapshot actually loaded, taken from the Hugging Face cache (e.g. `huggingface_hub` snapshot path or the loaded config's `_commit_hash`). `null` when `model_path` is a plain local folder without commit information. Failure to resolve it is logged at WARNING and never fails `load()`.
 
 ### 6.3 vLLM backend (`captioning/joycaption_vllm.py`, class `JoyCaptionVLLMModel`)
 
@@ -433,7 +455,7 @@ Behaviour:
 3. Maps outputs to `CaptionResult` (`text.strip()`, `finish_reason`, `len(token_ids)`).
 4. `unload()` deletes the engine, runs `gc.collect()` and `torch.cuda.empty_cache()`. It must not crash if vLLM was never loaded.
 
-The exact vLLM version and any API differences (e.g. how `llm.chat` accepts PIL images) are pinned and verified in step 9. Deviations are recorded in `TODO.md`.
+The exact vLLM version and any API differences (e.g. how `llm.chat` accepts PIL images) are pinned and verified in step 9. Deviations are recorded in `TODO.md`. `describe()` reports `system_prompt` and `resolved_revision` exactly as §6.2.
 
 ---
 
@@ -473,6 +495,7 @@ Config validation happens in `__init__` (§9.3). Invalid config raises `ValueErr
   "images_planned": int,
   "images_load_failed": int,
   "captions_planned": int,
+  "captions_load_failed": int,     # captions_failed that come from image load failures (R2)
   "captions_ok": int, "captions_flagged": int, "captions_failed": int,
   "retries": int,
   "interrupted": bool,
@@ -484,6 +507,7 @@ Invariants (asserted by tests):
 
 - `images_in_shard == images_already_complete + images_deferred + images_planned`
 - If not interrupted: `captions_planned == captions_ok + captions_flagged + captions_failed`
+- `captions_load_failed <= captions_failed`; `captions_load_failed == 0` iff `images_load_failed == 0`
 
 ---
 
@@ -526,7 +550,7 @@ One line per `CaptionRecord` (§3), keys in dataclass order, `ensure_ascii=False
 - A malformed final line (crash mid-write) is skipped with a WARNING. A malformed line elsewhere is an error.
 - `is_complete(rel_path, caption_type)` is `True` if a record exists with status `ok` or `flagged`. `failed` records are retried on the next run.
 - With duplicate records for the same key, the latest `timestamp_utc` wins.
-- Logs a WARNING if existing records were produced with a different `prompt` for the same caption type and category (the prompt config changed between runs). They still count as complete. Use `--no-resume` or a new output dir to regenerate.
+- **Prompt-change WARNING (R7).** The runner passes the prompts it will use, `{(caption_type, source): rendered_prompt}` for the planned sources, to the index (`ResumeIndex.prompt_mismatches(current_prompts) -> dict[(caption_type, source), int]`). For every key where complete records were made with a different `prompt`, the runner logs one WARNING with the count, e.g. `1,234 completed 'long' captions for 'celeste' (game_crop) were made with a different prompt than the current config. They count as done and will not be regenerated. Use --no-resume or a new --output_dir to regenerate them.` It fires at the **first** resume after a change. Old records still count as complete.
 
 `build_record(...)`, `save_txt(record, output_dir, collision_set) -> Path` and `read_records(paths) -> Iterator[dict]` are public helpers.
 
@@ -548,10 +572,11 @@ def validate_config(cfg: dict) -> None                            # raises Value
 ```json
 {
   "input":   { "input_dir": "/data/pixel-art", "extensions": [".png", ".jpg", ".jpeg", ".webp"],
-               "recursive": true, "include_sources": null, "exclude_sources": [] },
+               "recursive": true, "include_sources": null,
+               "exclude_sources": ["fallout 2", "mark-of-the-ninja", "...", "pinterest-dataset-game"] },
   "model":   { "backend": "vllm",
                "model_path": "fancyfeast/llama-joycaption-beta-one-hf-llava",
-               "revision": null, "dtype": "bfloat16",
+               "revision": "ebf414ea497a020da0f82df3913e5b6cb8e9663a", "dtype": "bfloat16",
                "hf":   { "quantization": "nf4", "device_map": 0 },
                "vllm": { "max_model_len": 4096, "gpu_memory_utilization": 0.9, "max_num_seqs": 128,
                          "enable_prefix_caching": true, "enforce_eager": false } },
@@ -569,7 +594,6 @@ def validate_config(cfg: dict) -> None                            # raises Value
     }
   },
   "prompts": {
-    "system": "You are a helpful image captioner.",
     "template": "{instruction} {context} {constraints}",
     "constraints": "Do not mention the image resolution.",
     "default_category": "mixed_collection",
@@ -586,11 +610,15 @@ def validate_config(cfg: dict) -> None                            # raises Value
                "qa_sample": 100 },
   "runtime": { "shard": "0/1", "batch_size": 64, "num_workers": 4, "prefetch": 64,
                "max_images": null, "seed": 0, "log_every_s": 30, "log_level": "INFO",
-               "log_file": null, "gpu_hourly_cost": null }
+               "log_file": null, "gpu_hourly_cost": null, "load_failure_alarm": 50 }
 }
 ```
 
 `configs/sources.json`: `{"celeste": {"category": "game_crop", "name": "Celeste"}, ...}`. Inline `prompts.sources` is also accepted and takes precedence over `sources_file`.
+
+`input.exclude_sources` above is abbreviated; the configs carry the full list of the 41 sources excluded by the user (R9): `fallout 2`, `mark-of-the-ninja`, `tyranny`, `steamworld-dig`, `factorio`, `fallout`, `nine-sols`, `lies-of-p`, `craft-the-world`, `oxygen-not-included`, `darkest-dungeon`, `dustforce`, `a-valley-without-wind`, `hollow-knight`, `barotrauma`, `nom-nom-galaxy`, `lobotomy-corporation`, `apotheon`, `hades`, `rimworld`, `cult-of-the-lamb`, `industries-of-titan`, `the-vagrant`, `metro-last-light`, `turing-complete`, `hardcore-mecha`, `highfleet`, `space-rangers-hd-a-war-apart`, `empires-of-the-undergrowth`, `cavalry-girls`, `dyson-sphere-program`, `the-last-federation`, `aquaria`, `helldivers`, `prey`, `terra-invicta`, `trappist`, `synthetik-legion-rising`, `dave-the-diver`, `pinterest-dataset-video-game`, `pinterest-dataset-game`.
+
+`prompts.system` no longer exists (R6). A config that still sets it fails validation with a message saying the system prompt is fixed.
 
 ### 9.3 Validation rules (all reported together)
 
@@ -601,6 +629,7 @@ def validate_config(cfg: dict) -> None                            # raises Value
 - `shard` parses as `i/N` with `0 <= i < N`.
 - Positive ints: `batch_size`, `max_new_tokens`, `fsync_every`, `log_every_s`; `num_workers >= 0`; `max_images` is null or > 0.
 - `0 < top_p <= 1`, `temperature >= 0`.
+- `prompts.system` is absent (R6). `runtime.load_failure_alarm` is a positive int.
 
 ---
 
@@ -620,7 +649,11 @@ usage: run_caption.py [--config CONFIG] [--input_dir DIR] [--output_dir DIR]
 
 Thin wiring only: parse → `load_config` → `validate_config` → configure logging → build `ImageDataLoader` and `get_model(backend)` → `CaptionRunner(...).run()` (or `--dry_run`: print the plan as JSON, exit 0) → log the summary.
 
-Exit codes: `0` completed; `1` config or model-load error; `2` interrupted; `3` completed but zero captions succeeded while > 0 were planned (systemic problem).
+Exit codes: `0` completed; `1` config or model-load error; `2` interrupted; `3` systemic problem (R2), when either
+- captions were sent to the model (`captions_planned - captions_load_failed > 0`) and none ended `ok` or `flagged`, or
+- every planned image failed to load and `images_planned > runtime.load_failure_alarm` (default 50).
+
+A run whose only failures are a few unreadable images exits `0`.
 
 ### 10.2 `scripts/export_txt.py`
 
@@ -660,21 +693,26 @@ Writes a self-contained `qa/<name>.html`:
 
 ### 11.2 Docker (`docker/Dockerfile`)
 
-- `FROM vllm/vllm-openai:<pinned tag>` (version chosen and verified in step 13).
+- `FROM vllm/vllm-openai:v0.33.0` (CUDA 13.0; R1).
 - Copies the repo and runs `pip install --no-deps .` (pyproject, §15). Sets `ENTRYPOINT ["python", "/app/scripts/run_caption.py"]` (overrides the image's server entrypoint).
 - `HF_HOME` points to a mounted volume (`/workspace/hf-cache`) so the ~16 GB model is downloaded once per volume, not baked into the image.
 - The dataset and output directories are mounted volumes. No credentials are baked in. `HF_TOKEN` is an environment variable if ever needed.
+- `ARG GIT_SHA` → `ENV PIXEL_ART_CAPTIONER_GIT_SHA`. The manifest's `git_sha` uses `.git` when present, else this variable (the image has no `.git`).
 
+**Build (R3, `.github/workflows/docker.yml`).** On a pushed tag `v*` (and manual `workflow_dispatch`), GitHub Actions frees runner disk space (the base image is ~9 GB compressed), builds `docker/Dockerfile` with `--build-arg GIT_SHA=${{ github.sha }}`, and pushes `ghcr.io/rachid2198/pixel-art-captioner:<tag>` using the workflow's `GITHUB_TOKEN` (`packages: write`). The user makes the GHCR package public once, so RunPod pulls it without credentials. If the runner still runs out of disk, the fallback is appending the package layer to the remote base image without pulling it (e.g. `crane append`), recorded as a deviation.
 ### 11.3 Hardware guidance
 
 - vLLM bf16 needs about 17 GB for weights plus KV cache: use ≥ 24 GB GPUs (L4 24GB is marginal; A10/L40S/A100/H100/4090/5090 are fine).
 - HF NF4 (local) runs on 12 GB (RTX 3060).
 - On a 24 GB card the KV cache is small, which limits concurrency; 48 GB cards (L40S/A6000) allow larger batches.
 - Throughput is measured in the pilot (step 15). No numbers are assumed in this spec.
+- Budget arithmetic (R1, RunPod Secure on-demand prices published 2026-11-12: RTX 4090 $0.89/h, L40S $1.09/h): $200 buys ~225 h on a 4090 or ~183 h on an L40S. Captioning the 781,686 kept images in that time needs ~0.97 images/s (4090) or ~1.18 images/s (L40S), counting all enabled caption types per image. The pilot decides whether this fits; levers otherwise are fewer caption types, deduplication (R10), more exclusions, the Community fallback (R1) or a larger budget.
 
-### 11.4 RunPod setup (Q14, Q15)
+### 11.4 RunPod setup (Q14, Q15, R1)
 
-One **network volume** (same region as the pods) mounted at `/workspace`:
+**Secure Cloud** pods (network volumes are Secure-only). Deploy with RunPod's CUDA version filter set to **13.0** (vLLM 0.33.0 images are CUDA 13.0 only; on an RTX 4090 the image's CUDA compatibility mode cannot help, it covers only data-center GPUs). Create the volume in a data center that has **both** RTX 4090 and L40S under that filter, so the pilot can compare them.
+
+One **network volume** (same data center as the pods) mounted at `/workspace`:
 
 ```text
 /workspace/
@@ -686,12 +724,13 @@ One **network volume** (same region as the pods) mounted at `/workspace`:
 
 Flow:
 
-1. Locally: `pack_dataset.py` → tars.
+1. Locally: `pack_dataset.py --exclude_sources ...` (the R9 list) → tars; excluded sources are not uploaded.
 2. Upload the tars to the volume (`runpodctl send`/`receive`, or the volume's S3-compatible API; the exact method is verified and documented in README at step 13).
 3. On a cheap CPU pod or the first GPU pod: `unpack_dataset.sh`.
-4. GPU pod from the Docker image with `--shard i/N`.
+4. GPU pod from `ghcr.io/rachid2198/pixel-art-captioner:<tag>` with `--shard i/N`.
 5. On interruption, start a new pod with the same command; resume continues.
 6. Download `captions/` (small) when done.
+7. **Pilot check (open item):** when the CLI exits, does RunPod restart the container (idle billing loop) or stop the pod? Only if it restarts, propose a self-stop at the end of the run (pods carry `RUNPOD_POD_ID` and a pod-scoped `RUNPOD_API_KEY`).
 
 Budget guard (Q13): the runner logs images/hour, and if `runtime.gpu_hourly_cost` (optional, CLI `--gpu_hourly_cost`) is set, also $/1 000 images and the projected cost of the remaining work. The pilot must report these before the full run.
 
@@ -742,6 +781,8 @@ pixel-art-auto-captioner/
 ├── main.py                         # v0 prototype, preserved, never modified
 ├── SPEC.md  AGENTS.md  TODO.md  REVIEW.md  README.md
 ├── pyproject.toml                  # package metadata; `pip install -e .`
+├── .gitattributes                  # *.sh text eol=lf (R5)
+├── .github/workflows/docker.yml    # builds + pushes the GHCR image on tag v* (R3)
 ├── requirements.txt                # shared runtime (pillow)
 ├── requirements-local.txt          # HF backend (Windows/Linux local)
 ├── requirements-dev.txt            # pytest
@@ -813,6 +854,7 @@ Each step: implement → tests green → TODO.md updated → user notified. The 
 | 11 | `run_caption.py` CLI, configs, draft `sources.json` (**user approval**) | No |
 | 12 | `export_txt.py`, `make_qa_page.py`, `pack_dataset.py`, `unpack_dataset.sh` | No |
 | 13 | `pyproject.toml`, requirements split, Dockerfile, README (local + RunPod instructions) | No |
+| C1–C9 | v1.2 changes R1–R9 (§0.4) and a Windows-native re-verification of the suite; see `TODO.md` §2.1 | No |
 | 14 | Local smoke test on RTX 3060, HF backend, ~20 images (**user runs**) | Yes |
 | 15 | Cloud pilot: ~500 images across categories; measure throughput; review QA page; tune prompts (**user approval**) | Yes |
 | 16 | Full dataset run | Yes |
@@ -823,7 +865,12 @@ Each step: implement → tests green → TODO.md updated → user notified. The 
 
 | Item | Owner | When |
 |---|---|---|
-| Approve `configs/sources.json` (folder → category/name) | User | Step 11 |
+| ~~Approve `configs/sources.json`~~ | User | ✅ 2026-11-15 (R8) |
+| `ai_pixel_art` context sentence for `midjourney-dataset` (it also holds AI images of games that are not pixel art; candidate: "This image is AI-generated, in the style of a video game or pixel art.") | User + pilot | Step 15 |
+| Does RunPod restart a container after the CLI exits? Self-stop proposal only if it does (§11.4) | Pilot | Step 15 |
+| Default `prompts.sources_file` is relative to the current directory, so the default config only works when launched from the repo root (error message is clear). Keep, or resolve relative to the config file (needs approval) | User | Before step 14 |
+| `DEFAULT_CONFIG` keeps the example paths `/data/pixel-art` and `/data/captions` although `input_dir` is "required"; make them `null` (needs approval) | User | Before step 14 |
+| How the `pixel-art-dedup` result (keep-list) feeds the captioner (R10) | User | After the dedup design |
 | Final prompt wording per caption type and category; decide whether game-name injection helps or causes hallucination | User + pilot | Step 15 |
 | Pilot GPU decision: RTX 4090 vs L40S, by measured $/1 000 images | User + pilot | Step 15 |
 | Which caption types to run in the full pass | User | Step 16 |

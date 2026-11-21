@@ -1,7 +1,7 @@
 # AGENTS.md — Working Rules for Implementation Agents
 
 **Project:** Pixel Art Auto-Captioner
-**Specification:** `SPEC.md` v1.1 (2026-11-06)
+**Specification:** `SPEC.md` v1.2 (2026-11-21)
 **Progress ledger:** `TODO.md`
 **Applies to:** any coding agent working on this repo (currently Claude; previously Pi/DeepSeek/Qwen).
 
@@ -28,7 +28,8 @@ The repo and dataset live on the user's Windows machine (`F:\Research\Code\pixel
 - **The dataset is read-only.** No pipeline step writes inside `input_dir`.
 - **Ask before any new access** (new folders, installing packages, network, credentials).
 - **Git:** do not commit, branch, push or rewrite history unless the user asks. When asked, use the branch `v1.1` and one commit per TODO step.
-- Large scans of the dataset (≥ 280k images + ~1M msgpack files) are slow. Use bounded commands (`timeout`, `head`, per-folder sampling) and say so.
+- **Excluded sources stay untouched:** the 41 folders in `input.exclude_sources` (SPEC §9.2) are skipped by the pipeline; never delete them, the user curates the dataset himself.
+- Large scans of the dataset (918,760 images + ~2.75M msgpack files in 107 folders) are slow. Use bounded commands (`timeout`, `head`, per-folder sampling) and say so.
 
 ---
 
