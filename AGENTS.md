@@ -115,6 +115,8 @@ requires_model = pytest.mark.skipif(not _MODEL_AVAILABLE, reason="JoyCaption wei
 
 `_cuda_available()` must import torch lazily and return `False` if torch is missing.
 
+`JOYCAPTION_MODEL_PATH` must point at the folder that holds `config.json` (e.g. `.\Models\llama-joycaption-beta-one-bf16`, or the machine path in `CLAUDE.md`). With the bare default `./Models` and the weights in a subfolder, every GPU test skips silently. The weights must be the original bf16 checkpoint; a pre-quantized NF4 checkpoint overrides the backend's quantization config (TODO C9 notes, W5).
+
 ### 6.4 Relative path is the only unique key
 
 Stems like `000001` repeat across ~110 source folders. Never key, name or deduplicate by stem alone. Use `rel_path` (with extension).

@@ -43,6 +43,9 @@ assert _spec is not None and _spec.loader is not None
 cli = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(cli)
 
+#: ``model.revision`` pinned in the shipped configs (R4, SPEC §0.4).
+PINNED_REVISION = "ebf414ea497a020da0f82df3913e5b6cb8e9663a"
+
 IMAGES = [
     "celeste/0001/000001.png",
     "celeste/0001/000002.png",
@@ -1042,6 +1045,7 @@ class TestShippedConfigs:
         expected = json.loads(json.dumps(DEFAULT_CONFIG))
         expected["input"]["input_dir"] = "/workspace/pixel-art"
         expected["output"]["output_dir"] = "/workspace/captions"
+        expected["model"]["revision"] = PINNED_REVISION  # R4: the example pins the revision
         assert example == expected
         assert list(example) == list(DEFAULT_CONFIG)
         assert example["model"]["backend"] == "vllm"
@@ -1052,6 +1056,9 @@ class TestShippedConfigs:
         assert local["model"]["backend"] == "hf"
         assert local["model"]["hf"]["quantization"] == "nf4"
         assert local["runtime"]["batch_size"] <= 8
+        assert local["model"]["revision"] == PINNED_REVISION  # R4
+        # W4/W5: a folder of bf16 weights under ./Models, quantized to NF4 at load.
+        assert local["model"]["model_path"] == "./Models/llama-joycaption-beta-one-bf16"
         for value in (local["input"]["input_dir"], local["output"]["output_dir"],
                       local["model"]["model_path"]):
             assert not Path(value).is_absolute() and ":" not in value and "\\" not in value

@@ -38,6 +38,7 @@ import os
 from typing import Any
 
 from pixel_art_auto_captioner.captioning.base import CaptionModel
+from pixel_art_auto_captioner.captioning.revision import resolve_revision
 from pixel_art_auto_captioner.common.types import CaptionRequest, CaptionResult
 
 logger = logging.getLogger(__name__)
@@ -151,6 +152,7 @@ class JoyCaptionHFModel(CaptionModel):
         self._torch_dtype: Any = None
         self._eos_token_ids: frozenset[int] = frozenset()
         self._settings: dict[str, Any] = {}
+        self._resolved_revision: str | None = None
         self._loaded = False
 
     # ------------------------------------------------------------------
@@ -191,6 +193,7 @@ class JoyCaptionHFModel(CaptionModel):
             self.unload()
 
         self._settings = settings
+        self._resolved_revision = None
         model_path = settings["model_path"]
         logger.info(
             "Loading JoyCaption (hf) from %s (revision=%s, dtype=%s, quantization=%s, device_map=%r)",
@@ -239,8 +242,13 @@ class JoyCaptionHFModel(CaptionModel):
             self._release()
             raise
 
+        self._resolved_revision = resolve_revision(
+            model_path, settings["revision"],
+            getattr(getattr(self._model, "config", None), "_commit_hash", None),
+        )
         self._loaded = True
-        logger.info("JoyCaption (hf) loaded on %s", getattr(self._model, "device", "?"))
+        logger.info("JoyCaption (hf) loaded on %s (resolved_revision=%s)",
+                    getattr(self._model, "device", "?"), self._resolved_revision)
 
     def caption_batch(self, requests: list[CaptionRequest]) -> list[CaptionResult]:
         """Caption ``requests`` one at a time, in order (D9).
@@ -289,7 +297,9 @@ class JoyCaptionHFModel(CaptionModel):
 
         Returns:
             ``model_name``, ``backend``, ``model_path``, ``revision`` (as
-            configured, ``None`` if unset), ``dtype``, ``quantization``,
+            configured, ``None`` if unset), ``resolved_revision`` (the commit
+            hash actually loaded, ``None`` for a plain local folder; R4),
+            ``dtype``, ``quantization``,
             ``device_map``, ``quant_skip_modules`` (``None`` without
             quantization) and ``torch_version``, ``transformers_version``,
             ``bitsandbytes_version`` (``None`` when unknown). The settings are
@@ -304,6 +314,7 @@ class JoyCaptionHFModel(CaptionModel):
             **super().describe(),
             "model_path": settings.get("model_path"),
             "revision": settings.get("revision"),
+            "resolved_revision": self._resolved_revision,
             "dtype": settings.get("dtype"),
             "quantization": quantization,
             "device_map": settings.get("device_map"),

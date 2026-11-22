@@ -443,7 +443,8 @@ class TestImports:
         for node in ast.walk(tree):  # anywhere: only captioning.base and common from the package
             if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("pixel_art_auto_captioner"):
                 assert node.module.startswith(
-                    ("pixel_art_auto_captioner.common", "pixel_art_auto_captioner.captioning.base")
+                    ("pixel_art_auto_captioner.common", "pixel_art_auto_captioner.captioning.base",
+                     "pixel_art_auto_captioner.captioning.revision")
                 ), node.module
 
 
@@ -1040,6 +1041,7 @@ DESCRIBE_KEYS = {
     "backend",
     "model_path",
     "revision",
+    "resolved_revision",
     "dtype",
     "quantization",
     "device_map",
@@ -1049,6 +1051,54 @@ DESCRIBE_KEYS = {
     "bitsandbytes_version",
 }
 
+
+class TestResolvedRevision:
+    """R4: ``resolved_revision`` is the commit actually loaded; never fails ``load()``."""
+
+    HASH = "ebf414ea497a020da0f82df3913e5b6cb8e9663a"
+
+    def test_from_loaded_config_commit_hash(self, make, fakes) -> None:
+        fakes.model.config = SimpleNamespace(_commit_hash=self.HASH)
+        model = make()
+        model.load({"model_path": REPO_ID})
+        assert model.describe()["resolved_revision"] == self.HASH
+
+    def test_snapshot_path(self, make, tmp_path) -> None:
+        snapshot = tmp_path / "snapshots" / self.HASH
+        snapshot.mkdir(parents=True)
+        model = make()
+        model.load({"model_path": str(snapshot)})
+        assert model.describe()["resolved_revision"] == self.HASH
+
+    def test_plain_folder_is_none(self, make, tmp_path) -> None:
+        model = make()
+        model.load({"model_path": str(tmp_path), "revision": self.HASH})
+        info = model.describe()
+        assert info["resolved_revision"] is None and info["revision"] == self.HASH
+
+    def test_lookup_error_warns_and_load_succeeds(self, make, monkeypatch, caplog) -> None:
+        from pixel_art_auto_captioner.captioning import revision
+
+        def boom(repo_id, rev):
+            raise OSError("cache unreadable")
+
+        monkeypatch.setattr(revision, "_hub_cache_lookup", boom)
+        caplog.set_level(logging.WARNING)
+        model = make()
+        model.load({"model_path": REPO_ID})
+        assert model.loaded and model.describe()["resolved_revision"] is None
+        assert any(r.levelno == logging.WARNING and "cache unreadable" in r.getMessage()
+                   for r in caplog.records)
+
+    def test_reset_on_reload_and_kept_after_unload(self, make, fakes, tmp_path) -> None:
+        fakes.model.config = SimpleNamespace(_commit_hash=self.HASH)
+        model = make()
+        model.load({"model_path": REPO_ID})
+        model.unload()
+        assert model.describe()["resolved_revision"] == self.HASH
+        fakes.model.config = SimpleNamespace(_commit_hash=None)
+        model.load({"model_path": str(tmp_path)})
+        assert model.describe()["resolved_revision"] is None
 
 class TestDescribe:
     def test_before_load(self, monkeypatch) -> None:
@@ -1070,6 +1120,7 @@ class TestDescribe:
             "backend": "hf",
             "model_path": "./Models",
             "revision": "deadbeef",
+            "resolved_revision": None,  # plain folder, fake config has no _commit_hash
             "dtype": "float16",
             "quantization": "nf4",
             "device_map": 0,
@@ -1081,7 +1132,7 @@ class TestDescribe:
         json.dumps(info)
 
     def test_revision_is_recorded_as_configured(self, make) -> None:
-        """D11: a null revision stays null (no resolved commit hash; proposal P4 is pending)."""
+        """D11: a null revision stays null; the loaded hash is `resolved_revision` (R4)."""
         model = make()
         model.load({})
         assert model.describe()["revision"] is None

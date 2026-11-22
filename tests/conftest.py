@@ -94,3 +94,15 @@ def sample_caption_record(sample_image_record) -> "CaptionRecord":
         timestamp_utc="2026-11-07T12:00:00Z",
         extra={"source_name": "Celeste"},
     )
+
+@pytest.fixture(autouse=True)
+def _no_real_hub_cache(monkeypatch):
+    """Keep the suite hermetic: ``resolved_revision`` never reads the real HF cache (R4).
+
+    Backend tests that load a repo id would otherwise import ``huggingface_hub``
+    and look in this machine's cache. Tests of the lookup itself call the
+    original function directly (``tests/test_revision.py``).
+    """
+    from pixel_art_auto_captioner.captioning import revision
+
+    monkeypatch.setattr(revision, "_hub_cache_lookup", lambda repo_id, rev: None)

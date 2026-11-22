@@ -352,7 +352,8 @@ class TestImports:
                 assert module.split(".")[0] not in HEAVY, module
                 if module.startswith("pixel_art_auto_captioner"):
                     assert module.startswith(
-                        ("pixel_art_auto_captioner.common", "pixel_art_auto_captioner.captioning.base")
+                        ("pixel_art_auto_captioner.common", "pixel_art_auto_captioner.captioning.base",
+                     "pixel_art_auto_captioner.captioning.revision")
                     ), module
 
         # Dynamic imports: only import_module("vllm"), and only inside JoyCaptionVLLMModel.load().
@@ -979,6 +980,7 @@ DESCRIBE_KEYS = {
     "backend",
     "model_path",
     "revision",
+    "resolved_revision",
     "dtype",
     "max_model_len",
     "gpu_memory_utilization",
@@ -1023,11 +1025,46 @@ class TestDescribe:
         model.load({})
         assert model.describe()["revision"] is None
 
-    def test_no_resolved_commit_hash(self, make) -> None:
-        """Proposal P4 is not implemented: only the configured revision is recorded."""
+    def test_resolved_revision_from_hub_cache(self, make, monkeypatch) -> None:
+        """R4: vLLM downloads into the HF cache; the snapshot hash is looked up there."""
+        from pixel_art_auto_captioner.captioning import revision
+
+        commit = "ebf414ea497a020da0f82df3913e5b6cb8e9663a"
+        calls = []
+        monkeypatch.setattr(revision, "_hub_cache_lookup",
+                            lambda repo_id, rev: calls.append((repo_id, rev)) or commit)
         model = make()
-        model.load({})
-        assert not any("commit" in key or "resolved" in key for key in model.describe())
+        model.load({"model_path": REPO_ID, "revision": commit})
+        assert model.describe()["resolved_revision"] == commit
+        assert calls == [(REPO_ID, commit)]
+
+    def test_resolved_revision_snapshot_path(self, make, tmp_path) -> None:
+        commit = "ebf414ea497a020da0f82df3913e5b6cb8e9663a"
+        snapshot = tmp_path / "snapshots" / commit
+        snapshot.mkdir(parents=True)
+        model = make()
+        model.load({"model_path": str(snapshot)})
+        assert model.describe()["resolved_revision"] == commit
+
+    def test_resolved_revision_plain_folder_is_none(self, make, tmp_path) -> None:
+        model = make()
+        model.load({"model_path": str(tmp_path)})
+        assert model.describe()["resolved_revision"] is None
+
+    def test_resolved_revision_lookup_error_warns_and_load_succeeds(self, make, monkeypatch,
+                                                                    caplog) -> None:
+        from pixel_art_auto_captioner.captioning import revision
+
+        def boom(repo_id, rev):
+            raise ImportError("No module named 'huggingface_hub'")
+
+        monkeypatch.setattr(revision, "_hub_cache_lookup", boom)
+        caplog.set_level(logging.WARNING)
+        model = make()
+        model.load({"model_path": REPO_ID})
+        assert model.loaded and model.describe()["resolved_revision"] is None
+        assert any(r.levelno == logging.WARNING and "huggingface_hub" in r.getMessage()
+                   for r in caplog.records)
 
     def test_json_serialisable(self, make, tmp_path: Path) -> None:
         model = make()

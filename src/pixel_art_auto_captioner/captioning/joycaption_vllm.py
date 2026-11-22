@@ -52,6 +52,7 @@ import sys
 from typing import Any
 
 from pixel_art_auto_captioner.captioning.base import CaptionModel
+from pixel_art_auto_captioner.captioning.revision import resolve_revision
 from pixel_art_auto_captioner.common.types import CaptionRequest, CaptionResult
 
 logger = logging.getLogger(__name__)
@@ -205,6 +206,7 @@ class JoyCaptionVLLMModel(CaptionModel):
         self._vllm: Any = None
         self._llm: Any = None
         self._settings: dict[str, Any] = {}
+        self._resolved_revision: str | None = None
         self._loaded = False
 
     # ------------------------------------------------------------------
@@ -246,6 +248,7 @@ class JoyCaptionVLLMModel(CaptionModel):
             self.unload()
 
         self._settings = settings
+        self._resolved_revision = None
         model_path = settings["model_path"]
         logger.info(
             "Loading JoyCaption (vllm) from %s (revision=%s, dtype=%s, max_model_len=%d, "
@@ -268,8 +271,11 @@ class JoyCaptionVLLMModel(CaptionModel):
             self._release()
             raise
 
+        # vLLM downloads into the Hugging Face cache, so the snapshot hash is found there (R4).
+        self._resolved_revision = resolve_revision(model_path, settings["revision"])
         self._loaded = True
-        logger.info("JoyCaption (vllm) loaded (vllm %s)", self._library_version(self._vllm, "vllm"))
+        logger.info("JoyCaption (vllm) loaded (vllm %s, resolved_revision=%s)",
+                    self._library_version(self._vllm, "vllm"), self._resolved_revision)
 
     def caption_batch(self, requests: list[CaptionRequest]) -> list[CaptionResult]:
         """Caption ``requests`` with one batched ``llm.chat`` call.
@@ -357,6 +363,7 @@ class JoyCaptionVLLMModel(CaptionModel):
             **super().describe(),
             "model_path": settings.get("model_path"),
             "revision": settings.get("revision"),
+            "resolved_revision": self._resolved_revision,
             "dtype": settings.get("dtype"),
             "max_model_len": settings.get("max_model_len"),
             "gpu_memory_utilization": settings.get("gpu_memory_utilization"),

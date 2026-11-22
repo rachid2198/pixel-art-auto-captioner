@@ -4,8 +4,8 @@
   },
   "model": {
     "backend": "hf",
-    "model_path": "./Models",
-    "revision": null,
+    "model_path": "./Models/llama-joycaption-beta-one-bf16",
+    "revision": "ebf414ea497a020da0f82df3913e5b6cb8e9663a",
     "dtype": "bfloat16",
     "hf": {
       "quantization": "nf4",

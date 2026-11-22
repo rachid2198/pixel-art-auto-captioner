@@ -14,7 +14,7 @@
   "model": {
     "backend": "vllm",
     "model_path": "fancyfeast/llama-joycaption-beta-one-hf-llava",
-    "revision": null,
+    "revision": "ebf414ea497a020da0f82df3913e5b6cb8e9663a",
     "dtype": "bfloat16",
     "hf": {
       "quantization": "nf4",

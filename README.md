@@ -45,10 +45,10 @@ python -m venv .env
 ```
 
 The CPU suite needs no torch, transformers or vllm. On Windows the bash and POSIX-only tests of
-`tests/test_pack_dataset.py` skip. GPU tests (local, need the weights):
+`tests/test_pack_dataset.py` skip. GPU tests (local, need the bf16 weights; see the note under §2):
 
 ```powershell
-$env:JOYCAPTION_MODEL_PATH = ".\Models"
+$env:JOYCAPTION_MODEL_PATH = ".\Models\llama-joycaption-beta-one-bf16"
 .\.env\Scripts\python.exe -m pytest tests/test_model_gpu.py -q -m gpu
 ```
 
@@ -61,11 +61,22 @@ Precedence: CLI flag > config file > built-in defaults (`common/config.py`). All
 | File | Use |
 |---|---|
 | `configs/example_config.json` | Cloud defaults: vLLM, bf16, `input_dir` `/workspace/pixel-art`, `output_dir` `/workspace/captions` |
-| `configs/local_hf_config.json` | RTX 3060: HF backend, NF4, weights in `./Models`, images in `./input`, output in `./output`, small batches |
+| `configs/local_hf_config.json` | RTX 3060: HF backend, NF4 at load, bf16 weights in `./Models/llama-joycaption-beta-one-bf16`, images in `./input`, output in `./output`, small batches |
 | `configs/sources.json` | Source folder → category + display name used in the prompts. **Draft, awaiting your approval** (TODO.md step 11 notes) |
 
 Caption types (`long`, `short`, `tags`, `sd_prompt`) are defined in the config; `generation.enabled_caption_types`
 (or `--caption_types`) picks the ones to run. Unknown source folders use `prompts.default_category`.
+
+Both configs pin `model.revision` to `ebf414ea497a020da0f82df3913e5b6cb8e9663a`; the run manifest also records
+`resolved_revision`, the commit actually loaded. The local config expects the **original bf16 weights** (the HF
+backend quantizes the language model to NF4 while loading and keeps the vision tower in bf16). A pre-quantized
+NF4 checkpoint does not work: its stored quantization config wins and the vision tower ends up 4-bit. Download:
+
+```powershell
+.\.env\Scripts\hf.exe download fancyfeast/llama-joycaption-beta-one-hf-llava --revision ebf414ea497a020da0f82df3913e5b6cb8e9663a --local-dir Models\llama-joycaption-beta-one-bf16
+```
+
+If the weights live elsewhere, pass `--model_path` (and set `JOYCAPTION_MODEL_PATH` for the GPU tests).
 
 ---
 
@@ -81,7 +92,7 @@ python scripts/run_caption.py [--config CONFIG] [--input_dir DIR] [--output_dir 
                               [--log_level {DEBUG,INFO,WARNING,ERROR}]
 ```
 
-Local smoke test (images in `./input`, weights in `./Models`):
+Local smoke test (images in `./input`, weights in `./Models/llama-joycaption-beta-one-bf16` or `--model_path`):
 
 ```powershell
 .\.env\Scripts\python.exe scripts\run_caption.py --config configs\local_hf_config.json --max_images 20 --dry_run
