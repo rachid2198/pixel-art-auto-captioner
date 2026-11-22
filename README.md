@@ -151,20 +151,37 @@ vllm 0.33.0), copies `src/`, `scripts/`, `configs/` and installs the package wit
 `scripts/run_caption.py`; the container command is its flags. No weights, dataset or credentials are in the image;
 the model downloads once to `HF_HOME=/workspace/hf-cache` on the volume (set `HF_TOKEN` only if ever needed).
 
+**GitHub Actions builds and publishes it** (`.github/workflows/docker.yml`, R3): pushing a tag `v*` builds the image
+with `GIT_SHA` set to the commit (the run manifest's `git_sha`, since the image has no `.git`) and pushes
+`ghcr.io/rachid2198/pixel-art-captioner:<tag>`. The workflow can also be started by hand (Actions → docker → Run
+workflow, with an image tag). After the first push, make the package public once (GitHub → Packages →
+pixel-art-captioner → Package settings → Change visibility → Public) so RunPod pulls it without credentials.
+
+```powershell
+git tag v1.2.0
+git push origin v1.2.0
+```
+
+Manual build, if ever needed (from the repo root of a clean clone, which keeps `Models/`, `input/` and `output/` out
+of the build context):
+
 ```bash
-# From the repo root of a clean clone (keeps Models/, input/, output/ out of the build context):
-docker build -f docker/Dockerfile -t <registry-user>/pixel-art-captioner:v1.1 .
-docker push <registry-user>/pixel-art-captioner:v1.1
+docker build -f docker/Dockerfile --build-arg GIT_SHA=$(git rev-parse HEAD) -t ghcr.io/rachid2198/pixel-art-captioner:v1.2.0 .
 ```
 
 The image needs a host driver that supports CUDA 13.0 and a GPU with ≥ 24 GB (RTX 4090, L40S, A6000, A100, …).
-The image has not been built yet; the first build happens in the pilot (TODO step 15).
+It has not been built yet; the first build is the first tag push.
 
 ---
 
 ## 5. RunPod flow
 
-One **network volume**, in a datacenter that supports RunPod's S3-compatible API, mounted at `/workspace` in every pod:
+Use **Secure Cloud** pods: network volumes exist only there (R1). When deploying, set RunPod's **CUDA version filter
+to 13.0**. The vLLM 0.33.0 image is CUDA 13.0 only, and on an RTX 4090 the image's CUDA compatibility mode cannot
+help (it covers only data-center GPUs).
+
+Create one **network volume** in a data center that has **both RTX 4090 and L40S** under that filter (so the pilot
+can compare them) and supports RunPod's S3-compatible API. Pods in the same data center mount it at `/workspace`:
 
 ```text
 /workspace/
@@ -209,17 +226,30 @@ One **network volume**, in a datacenter that supports RunPod's S3-compatible API
    It verifies every tar before extracting and can be re-run. If bash reports `$'\r': command not found`, the script
    was uploaded with Windows line endings: run `sed -i 's/\r$//' /workspace/unpack_dataset.sh` and start it again.
 
-4. **Launch** GPU pods from the Docker image, volume at `/workspace`, one GPU and one shard per pod. The container
-   command is the CLI flags, e.g. for two pods in the pilot (500 images each, cost logging on):
+4. **Launch** GPU pods from `ghcr.io/rachid2198/pixel-art-captioner:<tag>`, volume at `/workspace`, one GPU and one
+   shard per pod. The container command is the CLI flags. `--gpu_hourly_cost` is the pod's Secure on-demand price:
+   **0.89** for an RTX 4090, **1.09** for an L40S (published 2026-11-12; check the console). For example, the pilot
+   with one pod of each (500 images each, cost logging on):
 
    ```text
-   --config configs/example_config.json --shard 0/2 --max_images 500 --gpu_hourly_cost 0.69
-   --config configs/example_config.json --shard 1/2 --max_images 500 --gpu_hourly_cost 0.69
+   --config configs/example_config.json --shard 0/2 --max_images 500 --gpu_hourly_cost 0.89    # RTX 4090 pod
+   --config configs/example_config.json --shard 1/2 --max_images 500 --gpu_hourly_cost 1.09    # L40S pod
    ```
 
-   Check first with `--dry_run`. The log reports images/h and, with `--gpu_hourly_cost` (the pod's $/h), $/1k images
-   and the projected cost of the remaining work, which the pilot must report before the full run (budget $50–$200).
-   Several GPUs on one machine: one process per GPU (`CUDA_VISIBLE_DEVICES=k`, `--shard k/N`).
+   Check first with `--dry_run` (it should list 781,686 images in 66 sources for the whole dataset). The log reports
+   images/h and, with `--gpu_hourly_cost`, $/1k images and the projected cost of the remaining work, which the pilot
+   must report before the full run. Several GPUs on one machine: one process per GPU (`CUDA_VISIBLE_DEVICES=k`,
+   `--shard k/N`).
+
+   **Budget arithmetic** (SPEC §11.3): $200 buys ~225 h on a 4090 or ~183 h on an L40S. Captioning all 781,686 kept
+   images in that time needs **~0.97 images/s** (4090) or **~1.18 images/s** (L40S), counting every enabled caption
+   type per image. The pilot shows whether that fits; if not, the levers are fewer caption types, deduplication
+   (separate `pixel-art-dedup` project), more exclusions, Community Cloud without a volume (a fallback proposal), or
+   a larger budget.
+
+   **Pilot check (open item):** when the CLI exits, does RunPod restart the container (and keep billing in a loop) or
+   stop the pod? Watch the first pilot pod after it finishes. Only if it restarts, a self-stop at the end of the run
+   will be proposed (pods carry `RUNPOD_POD_ID` and a pod-scoped `RUNPOD_API_KEY`). Until then, stop pods by hand.
 
 5. **Interrupted** (spot reclaim, crash)? Start a new pod with the same command; resume continues where it stopped.
    Stop or terminate pods when their run has finished (billing continues while a pod runs).
@@ -227,22 +257,3 @@ One **network volume**, in a datacenter that supports RunPod's S3-compatible API
 6. **Download** `captions/` (small) when done, e.g.
    `aws s3 cp s3://<VOLUME_ID>/captions/ .\runpod-captions\ --recursive --region EUR-IS-1 --endpoint-url https://s3api-eur-is-1.runpod.io/`,
    then run `export_txt.py` / `make_qa_page.py` where the images are.
-
----
-
-## 6. Syncing your PC after the overnight run
-
-The v1.1 work is committed to the `v1.1` branch on GitHub (`origin/v1.1`). The working copy on the PC was edited in
-place and holds the same content. To make the PC match the branch exactly:
-
-```text
-cd F:\Research\Code\pixel-art-auto-captioner
-git fetch origin
-git status            # expect only files that are also in origin/v1.1, plus untracked HANDOFF.md/OVERNIGHT_RUN.md
-git reset --hard origin/v1.1
-```
-
-**Warning:** `git reset --hard` discards local uncommitted edits to tracked files (here they are identical to what was
-pushed, so nothing is lost; check `git status` first if you changed anything yourself). Files that were removed in git
-(e.g. `tests/test_model.py`) disappear from the PC with this command. Untracked and ignored files (`.env/`, `Models/`,
-`input/`, `output/`, `HANDOFF.md`, `OVERNIGHT_RUN.md`) are left alone.
