@@ -1,7 +1,10 @@
 # Cloud image for the vLLM backend (SPEC v1.1 §11.2, §15).
 #
-# Build from the repo root (a clean clone keeps the build context small):
-#   docker build -f docker/Dockerfile -t <registry-user>/pixel-art-captioner:v1.1 .
+# Built and pushed by GitHub Actions on a tag v* (.github/workflows/docker.yml,
+# R3) as ghcr.io/rachid2198/pixel-art-captioner:<tag>. Manual build from the
+# repo root (a clean clone keeps the build context small):
+#   docker build -f docker/Dockerfile --build-arg GIT_SHA=$(git rev-parse HEAD) \
+#       -t ghcr.io/rachid2198/pixel-art-captioner:v1.2 .
 #
 # The base image provides CUDA 13.0, torch, transformers and vllm==0.33.0
 # (the version the vLLM backend was written against, TODO step 9). This image
@@ -35,6 +38,12 @@ RUN PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --no-deps --no-cache-dir 
     && python3 -c "import importlib.metadata as m, sys; v = m.version('vllm'); print('vllm', v); sys.exit(0 if v.split('+')[0] == '0.33.0' else 'expected vllm 0.33.0, got ' + v)" \
     && python3 -c "import PIL, pixel_art_auto_captioner as p; print('pixel-art-auto-captioner', p.__version__, '| pillow', PIL.__version__)" \
     && python3 scripts/run_caption.py --help > /dev/null
+
+# The image has no .git, so the run manifest's git_sha comes from the build
+# (SPEC §11.2): --build-arg GIT_SHA=<commit>. Empty when not given. Declared
+# last so a new commit does not invalidate the cached install layer.
+ARG GIT_SHA=""
+ENV PIXEL_ART_CAPTIONER_GIT_SHA=${GIT_SHA}
 
 # Replace the base image's API-server entrypoint with the captioning CLI.
 # Pass the CLI flags as the container command, e.g.

@@ -126,6 +126,9 @@ _FAILURES_DIR = "failures"
 _RUNS_DIR = "runs"
 _HEX40 = re.compile(r"[0-9a-f]{40}")
 
+#: Commit of the Docker image build (``ARG GIT_SHA``), used when there is no ``.git`` (R3).
+_GIT_SHA_ENV = "PIXEL_ART_CAPTIONER_GIT_SHA"
+
 
 def _monotonic() -> float:
     """Monotonic clock for progress/throughput (module-level so tests can replace it)."""
@@ -1012,15 +1015,17 @@ def _git_sha(start_dirs: Iterable[Path] | None = None) -> str | None:
 
     No ``git`` subprocess: follows ``.git`` (a directory, or a ``gitdir:``
     file), ``HEAD`` (a detached hash or ``ref:``), the loose ref, then
-    ``packed-refs``. Returns ``None`` when there is no checkout (e.g. an
-    installed package in Docker) or on any read problem.
+    ``packed-refs``. Without a checkout (e.g. the installed package in the
+    Docker image) it falls back to ``PIXEL_ART_CAPTIONER_GIT_SHA``, which the
+    image build sets from its ``GIT_SHA`` build arg (SPEC §11.2, R3).
 
     Args:
         start_dirs: Directories to search upwards from (default: this
             module's directory, then the current directory).
 
     Returns:
-        The 40-hex commit hash, or ``None``.
+        The 40-hex commit hash, or ``None`` (no checkout, no valid variable,
+        or a read problem).
     """
     if start_dirs is None:
         start_dirs = (Path(__file__).resolve().parent, Path.cwd())
@@ -1032,6 +1037,11 @@ def _git_sha(start_dirs: Iterable[Path] | None = None) -> str | None:
             continue
         if sha is not None:
             return sha
+    env_sha = os.environ.get(_GIT_SHA_ENV, "").strip().lower()
+    if _HEX40.fullmatch(env_sha):
+        return env_sha
+    if env_sha:
+        logger.warning("%s is not a 40-hex commit hash, ignored: %r", _GIT_SHA_ENV, env_sha)
     return None
 
 

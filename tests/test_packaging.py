@@ -148,6 +148,61 @@ class TestDockerfile:
         text = "\n".join(instructions)
         assert "HF_TOKEN=" not in text and "hf_" not in text.lower().replace("hf_home", "")
 
+    def test_git_sha_build_arg_feeds_the_manifest_variable(self, instructions: list[str]) -> None:
+        # R3 / SPEC §11.2: ARG GIT_SHA -> ENV PIXEL_ART_CAPTIONER_GIT_SHA (read by runner._git_sha).
+        args = [ln for ln in instructions if ln.startswith("ARG ")]
+        assert any(re.fullmatch(r'ARG GIT_SHA(=""|=)?', ln) for ln in args), args
+        assert "ENV PIXEL_ART_CAPTIONER_GIT_SHA=${GIT_SHA}" in instructions
+        # Declared after the install so a new commit keeps the cached layers.
+        install = next(i for i, ln in enumerate(instructions) if "pip install" in ln)
+        assert instructions.index("ENV PIXEL_ART_CAPTIONER_GIT_SHA=${GIT_SHA}") > install
+
+
+# ---------------------------------------------------------------------------
+# GitHub Actions image build (R3, SPEC §11.2)
+# ---------------------------------------------------------------------------
+
+WORKFLOW = ROOT / ".github" / "workflows" / "docker.yml"
+
+
+@pytest.fixture(scope="module")
+def workflow_text() -> str:
+    return WORKFLOW.read_text(encoding="utf-8")
+
+
+class TestWorkflow:
+    def test_yaml_parses_with_triggers_and_permissions(self, workflow_text: str) -> None:
+        yaml = pytest.importorskip("yaml")  # PyYAML is not a project dependency
+        doc = yaml.safe_load(workflow_text)
+        triggers = doc.get("on", doc.get(True))  # PyYAML reads the bare key `on` as True
+        assert triggers["push"]["tags"] == ["v*"]
+        assert "workflow_dispatch" in triggers
+        assert doc["permissions"]["packages"] == "write"
+        steps = doc["jobs"]["build"]["steps"]
+        assert steps[0]["name"] == "Free disk space"  # before anything is pulled
+        build = next(s for s in steps if str(s.get("uses", "")).startswith("docker/build-push-action"))
+        assert build["with"]["file"] == "docker/Dockerfile"
+        assert build["with"]["push"] is True
+        assert "GIT_SHA=${{ github.sha }}" in build["with"]["build-args"]
+
+    def test_tag_pattern_and_image_name(self, workflow_text: str) -> None:
+        assert re.search(r'^\s+tags: \["v\*"\]$', workflow_text, re.M)
+        assert "IMAGE: ghcr.io/rachid2198/pixel-art-captioner" in workflow_text
+        assert "tags: ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}" in workflow_text
+
+    def test_build_arg_and_token(self, workflow_text: str) -> None:
+        assert "GIT_SHA=${{ github.sha }}" in workflow_text
+        assert "password: ${{ secrets.GITHUB_TOKEN }}" in workflow_text
+        assert "packages: write" in workflow_text
+
+    def test_disk_cleanup_and_no_secrets_in_clear(self, workflow_text: str) -> None:
+        assert "sudo rm -rf /usr/share/dotnet" in workflow_text
+        assert "HF_TOKEN" not in workflow_text and "ghp_" not in workflow_text
+
+    def test_lf_and_no_tabs(self) -> None:
+        raw = WORKFLOW.read_bytes()
+        assert b"\r" not in raw and b"\t" not in raw
+
 
 # ---------------------------------------------------------------------------
 # Installed package (AGENTS.md §5)

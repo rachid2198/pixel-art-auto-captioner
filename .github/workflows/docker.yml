@@ -1,0 +1,71 @@
+# Build the cloud image (vLLM backend) and push it to GHCR (SPEC §11.2, R3).
+#
+# Runs on a pushed tag v* (image tag = the git tag) and manually
+# (workflow_dispatch, image tag given as input). The GHCR package is made
+# public once by the user, so RunPod pulls it without credentials.
+name: docker
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to push (e.g. v1.2-test)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/rachid2198/pixel-art-captioner
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      # The base image vllm/vllm-openai:v0.33.0 is ~9 GB compressed; the
+      # default runner has ~14 GB free, so remove preinstalled toolchains first.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL \
+                      /usr/local/share/boost /usr/local/.ghcup
+          sudo docker image prune --all --force
+          df -h /
+
+      - uses: actions/checkout@v4
+
+      - name: Image tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then TAG="${INPUT_TAG}"; else TAG="${GITHUB_REF_NAME}"; fi
+          case "${TAG}" in ""|*[!A-Za-z0-9_.-]*) echo "invalid image tag: '${TAG}'" >&2; exit 1;; esac
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+          tags: ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
+          push: true
+          provenance: false
+
+      - name: Disk after build
+        if: always()
+        run: df -h /

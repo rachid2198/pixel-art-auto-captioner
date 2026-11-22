@@ -1319,6 +1319,28 @@ class TestManifest:
         (broken / ".git").mkdir(parents=True)  # no HEAD file -> OSError -> None
         assert runner_mod._git_sha([broken]) is None
 
+    ENV = "PIXEL_ART_CAPTIONER_GIT_SHA"
+
+    def test_git_sha_env_fallback_without_checkout(self, tmp_path, monkeypatch) -> None:
+        # R3: the Docker image has no .git; the build arg fills this variable.
+        sha = "0123456789abcdef0123456789abcdef01234567"
+        monkeypatch.setenv(self.ENV, f" {sha.upper()} ")
+        assert runner_mod._git_sha([tmp_path]) == sha
+
+    def test_git_sha_checkout_wins_over_env(self, tmp_path, monkeypatch) -> None:
+        sha = "a" * 40
+        (tmp_path / ".git").mkdir()
+        (tmp_path / ".git" / "HEAD").write_text(sha + "\n", encoding="utf-8")
+        monkeypatch.setenv(self.ENV, "b" * 40)
+        assert runner_mod._git_sha([tmp_path]) == sha
+
+    @pytest.mark.parametrize("value", ["", "abc", "g" * 40, "a" * 41])
+    def test_git_sha_invalid_env_ignored(self, tmp_path, monkeypatch, caplog, value) -> None:
+        monkeypatch.setenv(self.ENV, value)
+        with caplog.at_level(logging.WARNING):
+            assert runner_mod._git_sha([tmp_path]) is None
+        assert (self.ENV in caplog.text) == bool(value)
+
 
 # ---------------------------------------------------------------------------
 # Progress and cost logging (§7.2 step 5, §11.4)
