@@ -69,9 +69,6 @@ _RESUME_KEYS: tuple[str, ...] = ("image_rel_path", "caption_type", "status", "ti
 #: Max longest side of a QA thumbnail, in pixels.
 _QA_THUMB_SIZE = 256
 
-#: Max number of groups listed in the prompt-change WARNING.
-_MAX_LISTED = 10
-
 
 # ---------------------------------------------------------------------------
 # Shard writer
@@ -250,10 +247,9 @@ class ResumeIndex:
         """Build the index from every ``<output_dir>/captions/*.jsonl`` file.
 
         A missing ``captions/`` directory gives an empty index. A malformed
-        final line of a file is skipped with a WARNING. Logs a WARNING if the
-        complete records of one (caption type, category, source) were produced
-        with different prompts (the prompt config changed between runs); they
-        still count as complete.
+        final line of a file is skipped with a WARNING. Prompt changes are
+        checked against the *current* prompts with :meth:`prompt_mismatches`
+        (R7), which the runner calls.
 
         Args:
             output_dir: The output directory (SPEC §8.1).
@@ -269,7 +265,6 @@ class ResumeIndex:
         """
         files = _caption_files(Path(output_dir))
         index = cls._scan(files)
-        index._warn_prompt_changes()
         logger.info(
             "Resume index: %d records in %d files, %d of %d (image, caption type) pairs complete",
             index.records_read, len(files), index.num_complete, len(index),
@@ -338,28 +333,50 @@ class ResumeIndex:
         """Number of (image, caption type) pairs with at least one record."""
         return sum(len(per) for per in self._entries.values())
 
-    def _warn_prompt_changes(self) -> None:
-        counts: dict[tuple[str, str, str], dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    def complete_keys(self) -> set[tuple[str, str]]:
+        """``(caption_type, source)`` pairs that have at least one complete record.
+
+        The runner renders the current prompt for each of these (restricted to
+        its enabled caption types) and passes them to :meth:`prompt_mismatches`.
+
+        Returns:
+            A new set; source ``""`` stands for files directly in ``input_dir``.
+        """
+        keys: set[tuple[str, str]] = set()
         for per in self._entries.values():
             for _, _, status, gid in per.values():
                 if status in _DONE_STATUSES:
-                    caption_type, category, source, prompt = self._groups[gid]
-                    counts[(caption_type, category, source)][prompt] += 1
-        changed = sorted(k for k, prompts in counts.items() if len(prompts) > 1)
-        if not changed:
-            return
-        listed = "; ".join(
-            f"{t}/{c}/{s or '<root>'}: {len(counts[(t, c, s)])} prompts "
-            f"({', '.join(str(n) for n in sorted(counts[(t, c, s)].values(), reverse=True))} records)"
-            for t, c, s in changed[:_MAX_LISTED]
-        )
-        more = f"; ... and {len(changed) - _MAX_LISTED} more" if len(changed) > _MAX_LISTED else ""
-        logger.warning(
-            "Existing complete records were produced with different prompts for %d "
-            "(caption type/category/source) groups; the prompt config changed between runs. "
-            "They still count as complete; use --no-resume or a new output_dir to regenerate. %s%s",
-            len(changed), listed, more,
-        )
+                    caption_type, _, source, _ = self._groups[gid]
+                    keys.add((caption_type, source))
+        return keys
+
+    def prompt_mismatches(self, current_prompts: Mapping[tuple[str, str], str]) -> dict[tuple[str, str], int]:
+        """Count complete records made with a prompt other than the current one (R7).
+
+        Only the winning (latest) record of each (image, caption type) key is
+        considered, and only if it is complete. Such records still count as
+        complete; this only reports them.
+
+        Args:
+            current_prompts: ``{(caption_type, source): rendered_prompt}`` as
+                the runner will use them. Keys not in the mapping are not
+                checked.
+
+        Returns:
+            ``{(caption_type, source): n}`` for every key with ``n > 0``
+            complete records whose ``prompt`` differs from the current one,
+            sorted by key.
+        """
+        counts: dict[tuple[str, str], int] = defaultdict(int)
+        for per in self._entries.values():
+            for _, _, status, gid in per.values():
+                if status not in _DONE_STATUSES:
+                    continue
+                caption_type, _, source, prompt = self._groups[gid]
+                current = current_prompts.get((caption_type, source))
+                if current is not None and prompt != current:
+                    counts[(caption_type, source)] += 1
+        return dict(sorted(counts.items()))
 
 
 # ---------------------------------------------------------------------------

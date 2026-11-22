@@ -1002,6 +1002,70 @@ class TestInterrupt:
 
 
 # ---------------------------------------------------------------------------
+# Prompt-change WARNING against the current prompts (§8.4, R7)
+# ---------------------------------------------------------------------------
+
+
+class TestPromptChangeWarning:
+    MARK = "were made with a different prompt than the current config"
+
+    def _warnings(self, caplog) -> list[str]:
+        return [r.getMessage() for r in caplog.records
+                if r.levelno == logging.WARNING and self.MARK in r.getMessage()]
+
+    def test_first_resume_after_prompt_edit_warns_with_counts(self, tmp_path, dataset, caplog) -> None:
+        cfg = build_config(tmp_path, dataset)
+        make_runner(cfg)[0].run()  # everything complete
+        edited = merge(cfg, {"prompts": {"categories": {"game_crop": "A crop from the game {source_name}."}}})
+        with caplog.at_level(logging.WARNING):
+            runner, model = make_runner(edited)
+            summary = runner.run()
+        assert summary["images_planned"] == 0 and model.requests == []  # old records still count as done
+        warnings = self._warnings(caplog)
+        assert len(warnings) == 4  # (long, short) x (celeste, hades); pinterest is mixed_collection
+        assert ("2 completed 'long' captions for 'celeste' (game_crop) were made with a different "
+                "prompt than the current config. They count as done and will not be regenerated. "
+                "Use --no-resume or a new --output_dir to regenerate them.") in warnings
+        assert "1 completed 'short' captions for 'hades' (game_crop)" in " ".join(warnings)
+
+    def test_unchanged_prompts_no_warning(self, tmp_path, dataset, caplog) -> None:
+        cfg = build_config(tmp_path, dataset)
+        make_runner(cfg)[0].run()
+        with caplog.at_level(logging.WARNING):
+            make_runner(cfg)[0].run()
+        assert self._warnings(caplog) == []
+
+    def test_game_crop_sources_with_different_names_no_false_warning(self, tmp_path, dataset,
+                                                                     caplog) -> None:
+        # celeste and hades share the game_crop category but render different prompts.
+        cfg = build_config(tmp_path, dataset)
+        make_runner(cfg)[0].run()
+        records = read_jsonl(captions_path(cfg))
+        assert len({r["prompt"] for r in records if r["caption_type"] == "long"
+                    and r["category"] == "game_crop"}) == 2
+        with caplog.at_level(logging.WARNING):
+            make_runner(cfg)[0].run()
+        assert self._warnings(caplog) == []
+
+    def test_only_enabled_caption_types_checked(self, tmp_path, dataset, caplog) -> None:
+        cfg = build_config(tmp_path, dataset)
+        make_runner(cfg)[0].run()
+        edited = merge(cfg, {"generation": {"enabled_caption_types": ["short"],
+                                            "caption_types": {"long": {"instruction": "Describe at length."}}}})
+        with caplog.at_level(logging.WARNING):
+            make_runner(edited)[0].run()
+        assert self._warnings(caplog) == []  # 'long' changed but is not enabled
+
+    def test_no_warning_without_resume(self, tmp_path, dataset, caplog) -> None:
+        cfg = build_config(tmp_path, dataset)
+        make_runner(cfg)[0].run()
+        edited = merge(cfg, {"prompts": {"constraints": "Be brief."}, "output": {"resume": False}})
+        with caplog.at_level(logging.WARNING):
+            make_runner(edited)[0].run()
+        assert self._warnings(caplog) == []
+
+
+# ---------------------------------------------------------------------------
 # Image load failures (§7.2, D5, B8)
 # ---------------------------------------------------------------------------
 

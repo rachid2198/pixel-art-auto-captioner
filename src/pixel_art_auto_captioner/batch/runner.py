@@ -295,6 +295,7 @@ class CaptionRunner:
 
         if self._resume:
             resume_index = ResumeIndex.from_output_dir(self.output_dir)
+            self._warn_prompt_changes(resume_index)
         else:
             logger.info("Resume disabled: nothing counts as complete")
             resume_index = ResumeIndex()
@@ -632,6 +633,31 @@ class CaptionRunner:
         if source not in self._source_cache:
             self._source_cache[source] = resolve_source(source, self._prompt_config)
         return self._source_cache[source]
+
+    def _warn_prompt_changes(self, index: ResumeIndex) -> None:
+        """One WARNING per (caption type, source) whose complete records used another prompt (R7).
+
+        The current prompts are rendered for the enabled caption types and the
+        sources that have complete records, so the warning fires at the first
+        resume after a prompt edit, even when every image of a source is done.
+        Never raises: a source whose prompt cannot be rendered is skipped.
+        """
+        current: dict[tuple[str, str], str] = {}
+        for caption_type, source in index.complete_keys():
+            if caption_type not in self._caption_types:
+                continue  # not enabled in this run
+            try:
+                current[(caption_type, source)] = self._prompt(source, caption_type)
+            except Exception as exc:  # e.g. a category removed from the config
+                logger.debug("Prompt check skipped for %s/%s: %s", caption_type, source, exc)
+        for (caption_type, source), count in index.prompt_mismatches(current).items():
+            category = self._resolve(source)[0]
+            logger.warning(
+                "%s completed %r captions for %r (%s) were made with a different prompt than the "
+                "current config. They count as done and will not be regenerated. Use --no-resume "
+                "or a new --output_dir to regenerate them.",
+                f"{count:,}", caption_type, source or "<root>", category,
+            )
 
     def _prompt(self, source: str, caption_type: str) -> str:
         key = (source, caption_type)

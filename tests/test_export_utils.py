@@ -833,67 +833,84 @@ class TestResumeIndex:
         assert not index.is_complete(rel, "tags")
 
 
-class TestPromptChangeWarning:
-    def _warnings(self, caplog):
-        return [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+class TestPromptMismatches:
+    """R7: complete records are compared with the *current* prompts."""
 
-    def test_different_prompts_same_group_warns(self, tmp_path, caplog):
-        _write_jsonl(
-            _shard_file(tmp_path),
-            [
-                _line(image_rel_path="celeste/1.jpg", prompt="old prompt"),
-                _line(image_rel_path="celeste/2.jpg", prompt="new prompt"),
-                _line(image_rel_path="celeste/3.jpg", prompt="new prompt"),
-            ],
-        )
-        with caplog.at_level(logging.WARNING, logger=LOGGER):
-            index = ResumeIndex.from_output_dir(tmp_path)
-        (msg,) = self._warnings(caplog)
-        assert "different prompts" in msg and "long/game_crop/celeste: 2 prompts (2, 1 records)" in msg
-        assert "--no-resume" in msg
+    def _index(self, tmp_path, lines):
+        _write_jsonl(_shard_file(tmp_path), lines)
+        return ResumeIndex.from_output_dir(tmp_path)
+
+    def test_counts_records_with_another_prompt(self, tmp_path):
+        index = self._index(tmp_path, [
+            _line(image_rel_path="celeste/1.jpg", prompt="old prompt"),
+            _line(image_rel_path="celeste/2.jpg", prompt="old prompt"),
+            _line(image_rel_path="celeste/3.jpg", prompt="new prompt"),
+        ])
+        assert index.prompt_mismatches({("long", "celeste"): "new prompt"}) == {("long", "celeste"): 2}
         assert index.is_complete("celeste/1.jpg", "long")  # still complete
 
-    def test_same_category_different_sources_no_warning(self, tmp_path, caplog):
-        # game_crop prompts legitimately differ by {source_name}.
-        _write_jsonl(
-            _shard_file(tmp_path),
-            [
-                _line(image_rel_path="celeste/1.jpg", source="celeste", prompt="... Celeste."),
-                _line(image_rel_path="hades/1.jpg", source="hades", prompt="... Hades."),
-                _line(image_rel_path="celeste/1.jpg", caption_type="short", prompt="short P"),
-            ],
-        )
-        with caplog.at_level(logging.WARNING, logger=LOGGER):
-            ResumeIndex.from_output_dir(tmp_path)
-        assert self._warnings(caplog) == []
+    def test_unchanged_prompts_give_nothing(self, tmp_path):
+        index = self._index(tmp_path, [_line(image_rel_path=f"celeste/{i}.jpg", prompt="P") for i in range(3)])
+        assert index.prompt_mismatches({("long", "celeste"): "P"}) == {}
 
-    def test_failed_and_superseded_records_ignored(self, tmp_path, caplog):
-        _write_jsonl(
-            _shard_file(tmp_path),
-            [
-                _line(image_rel_path="celeste/1.jpg", prompt="new"),
-                _line(image_rel_path="celeste/2.jpg", prompt="old", status="failed"),
-                _line(image_rel_path="celeste/3.jpg", prompt="old", timestamp_utc="2026-11-01T00:00:00Z"),
-                _line(image_rel_path="celeste/3.jpg", prompt="new"),
-            ],
-        )
-        with caplog.at_level(logging.WARNING, logger=LOGGER):
-            ResumeIndex.from_output_dir(tmp_path)
-        assert self._warnings(caplog) == []
+    def test_single_old_prompt_is_detected(self, tmp_path):
+        # The v1.1 check needed >= 2 prompts among the records; R7 compares with the config.
+        index = self._index(tmp_path, [_line(image_rel_path="celeste/1.jpg", prompt="old")])
+        assert index.prompt_mismatches({("long", "celeste"): "new"}) == {("long", "celeste"): 1}
 
-    def test_warning_lists_at_most_ten_groups(self, tmp_path, caplog):
-        lines = []
-        for i in range(12):
-            lines += [
-                _line(image_rel_path=f"s{i:02d}/1.jpg", source=f"s{i:02d}", prompt="a"),
-                _line(image_rel_path=f"s{i:02d}/2.jpg", source=f"s{i:02d}", prompt="b"),
-            ]
-        _write_jsonl(_shard_file(tmp_path), lines)
+    def test_sources_with_different_names_are_separate_keys(self, tmp_path):
+        # game_crop prompts legitimately differ by {source_name}: no false mismatch.
+        index = self._index(tmp_path, [
+            _line(image_rel_path="celeste/1.jpg", source="celeste", prompt="... Celeste."),
+            _line(image_rel_path="hades/1.jpg", source="hades", prompt="... Hades."),
+        ])
+        current = {("long", "celeste"): "... Celeste.", ("long", "hades"): "... Hades."}
+        assert index.prompt_mismatches(current) == {}
+
+    def test_keys_not_given_are_not_checked(self, tmp_path):
+        index = self._index(tmp_path, [
+            _line(image_rel_path="celeste/1.jpg", prompt="old"),
+            _line(image_rel_path="celeste/1.jpg", caption_type="short", prompt="old short"),
+        ])
+        assert index.prompt_mismatches({("short", "celeste"): "new short"}) == {("short", "celeste"): 1}
+        assert index.prompt_mismatches({}) == {}
+
+    def test_failed_and_superseded_records_ignored(self, tmp_path):
+        index = self._index(tmp_path, [
+            _line(image_rel_path="celeste/1.jpg", prompt="new"),
+            _line(image_rel_path="celeste/2.jpg", prompt="old", status="failed"),
+            _line(image_rel_path="celeste/3.jpg", prompt="old", timestamp_utc="2026-11-01T00:00:00Z"),
+            _line(image_rel_path="celeste/3.jpg", prompt="new"),
+        ])
+        assert index.prompt_mismatches({("long", "celeste"): "new"}) == {}
+
+    def test_flagged_counts_as_complete(self, tmp_path):
+        index = self._index(tmp_path, [_line(image_rel_path="celeste/1.jpg", prompt="old", status="flagged",
+                                             flags=["truncated"])])
+        assert index.prompt_mismatches({("long", "celeste"): "new"}) == {("long", "celeste"): 1}
+
+    def test_result_sorted_by_key(self, tmp_path):
+        index = self._index(tmp_path, [
+            _line(image_rel_path=f"{s}/1.jpg", source=s, prompt="old") for s in ("zeta", "alpha", "mid")
+        ])
+        current = {("long", s): "new" for s in ("zeta", "alpha", "mid")}
+        assert list(index.prompt_mismatches(current)) == [("long", "alpha"), ("long", "mid"), ("long", "zeta")]
+
+    def test_complete_keys(self, tmp_path):
+        index = self._index(tmp_path, [
+            _line(image_rel_path="celeste/1.jpg"),
+            _line(image_rel_path="celeste/1.jpg", caption_type="short"),
+            _line(image_rel_path="hades/1.jpg", source="hades", status="failed"),
+            _line(image_rel_path="root.jpg", source=""),
+        ])
+        assert index.complete_keys() == {("long", "celeste"), ("short", "celeste"), ("long", "")}
+        assert ResumeIndex().complete_keys() == set()
+
+    def test_loading_no_longer_warns(self, tmp_path, caplog):
         with caplog.at_level(logging.WARNING, logger=LOGGER):
-            ResumeIndex.from_output_dir(tmp_path)
-        (msg,) = self._warnings(caplog)
-        assert "for 12 " in msg and "and 2 more" in msg
-        assert "s09" in msg and "s10" not in msg
+            self._index(tmp_path, [_line(image_rel_path="celeste/1.jpg", prompt="a"),
+                                   _line(image_rel_path="celeste/2.jpg", prompt="b")])
+        assert [r for r in caplog.records if r.levelno == logging.WARNING] == []
 
 
 # ===========================================================================
