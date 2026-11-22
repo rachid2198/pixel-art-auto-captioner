@@ -1036,6 +1036,28 @@ class TestUnpackScript:
 # ===========================================================================
 
 
+class TestGitAttributes:
+    """R5/R11: LF in the repository, LF scripts on disk, executable unpack script."""
+
+    def test_gitattributes_rules(self):
+        rules = [line.split() for line in (REPO / ".gitattributes").read_text(encoding="utf-8").splitlines()
+                 if line.strip() and not line.lstrip().startswith("#")]
+        assert ["*", "text=auto"] in rules
+        assert ["*.sh", "text", "eol=lf"] in rules
+        assert "\r" not in (REPO / ".gitattributes").read_bytes().decode("utf-8")
+
+    def test_unpack_script_is_lf_on_disk(self):
+        assert b"\r" not in UNPACK.read_bytes()
+
+    def test_unpack_script_is_executable_in_git(self):
+        if shutil.which("git") is None or not (REPO / ".git").exists():
+            pytest.skip("not a git checkout")
+        proc = subprocess.run(["git", "ls-files", "-s", "scripts/unpack_dataset.sh"], cwd=str(REPO),
+                              capture_output=True, text=True, timeout=30)
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout.split()[0] == "100755", proc.stdout
+
+
 class TestScriptStandards:
     def test_no_print_lf_and_docstrings(self):
         source = SCRIPT.read_text(encoding="utf-8")

@@ -1,0 +1,5 @@
+# R11: store every text file with LF; CRLF-only edits by Windows tools are not changes.
+* text=auto
+
+# R5: shell scripts stay LF on disk too (bash rejects CRLF).
+*.sh text eol=lf
