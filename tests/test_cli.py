@@ -866,13 +866,15 @@ class TestConfigErrors:
 
     def test_bad_log_level_in_file(self, capsys, tmp_path, dataset) -> None:
         cfg = write_config(tmp_path / "c.json", {
-            "input": {"input_dir": str(dataset)}, "prompts": {"sources_file": None},
+            "input": {"input_dir": str(dataset)}, "output": {"output_dir": str(tmp_path / "o")},
+            "prompts": {"sources_file": None},
             "runtime": {"log_level": "LOUD"}})
         self.check(capsys, "--config", str(cfg), expect="runtime.log_level")
 
     def test_bad_loader_value(self, capsys, tmp_path, dataset) -> None:
         cfg = write_config(tmp_path / "c.json", {
-            "input": {"input_dir": str(dataset)}, "prompts": {"sources_file": None},
+            "input": {"input_dir": str(dataset)}, "output": {"output_dir": str(tmp_path / "o")},
+            "prompts": {"sources_file": None},
             "runtime": {"prefetch": 0}})
         self.check(capsys, "--config", str(cfg), expect="prefetch")
 
@@ -883,7 +885,8 @@ class TestConfigErrors:
                                expect) -> None:
         monkeypatch.setattr(cli, "get_model", ModelFactory())
         cfg = write_config(tmp_path / "c.json", {
-            "input": {"input_dir": str(dataset)}, "prompts": {"sources_file": None},
+            "input": {"input_dir": str(dataset)}, "output": {"output_dir": str(tmp_path / "o")},
+            "prompts": {"sources_file": None},
             "runtime": runtime})
         self.check(capsys, "--config", str(cfg), expect=expect)
 
@@ -985,7 +988,8 @@ class TestLogging:
 
     def test_lowercase_level_in_file(self, capsys, tmp_path, dataset) -> None:
         cfg = write_config(tmp_path / "c.json", {
-            "input": {"input_dir": str(dataset)}, "prompts": {"sources_file": None},
+            "input": {"input_dir": str(dataset)}, "output": {"output_dir": str(tmp_path / "o")},
+            "prompts": {"sources_file": None},
             "runtime": {"log_level": "warning"}})
         code, _, err = run_cli(capsys, "--config", str(cfg), "--dry_run")
         assert code == 0 and "Dry run" not in err  # INFO suppressed once configured
@@ -1046,10 +1050,37 @@ class TestShippedConfigs:
         expected["input"]["input_dir"] = "/workspace/pixel-art"
         expected["output"]["output_dir"] = "/workspace/captions"
         expected["model"]["revision"] = PINNED_REVISION  # R4: the example pins the revision
+        expected["prompts"]["sources_file"] = "sources.json"  # R12: next to the config
         assert example == expected
         assert list(example) == list(DEFAULT_CONFIG)
         assert example["model"]["backend"] == "vllm"
-        assert example["prompts"]["sources_file"] == "configs/sources.json"
+
+    @pytest.mark.parametrize("name", ["example_config.json", "local_hf_config.json"])
+    def test_shipped_config_finds_sources_from_any_cwd(self, name, tmp_path, monkeypatch) -> None:
+        # R12: sources.json sits next to the config; the launch folder does not matter.
+        monkeypatch.chdir(tmp_path)
+        cfg = load_config(CONFIGS / name, {})
+        assert read_json(name)["prompts"]["sources_file"] == "sources.json"
+        assert cfg["prompts"]["sources"] == read_json("sources.json")
+
+    @pytest.mark.parametrize(("flag", "key"), [("--input_dir", "input.input_dir"),
+                                               ("--output_dir", "output.output_dir")])
+    def test_missing_dir_names_the_flag(self, capsys, tmp_path, dataset, flag, key) -> None:
+        # R13: no built-in default; the message names the CLI flag.
+        cfg = {"prompts": {"sources_file": None}}
+        if flag == "--input_dir":
+            cfg["output"] = {"output_dir": str(tmp_path / "o")}
+        else:
+            cfg["input"] = {"input_dir": str(dataset)}
+        code, out, err = run_cli(capsys, "--config", str(write_config(tmp_path / "c.json", cfg)), "--dry_run")
+        assert code == 1 and out == ""
+        assert f"{key} is required (set it in the config or pass {flag})" in err
+
+    def test_dir_flags_satisfy_the_requirement(self, capsys, tmp_path, dataset) -> None:
+        cfg = write_config(tmp_path / "c.json", {"prompts": {"sources_file": None}})
+        r = dry_run(capsys, "--config", str(cfg), "--input_dir", str(dataset),
+                    "--output_dir", str(tmp_path / "o"))
+        assert r["images_planned"] == 5
 
     def test_local_hf_config(self) -> None:
         local = read_json("local_hf_config.json")

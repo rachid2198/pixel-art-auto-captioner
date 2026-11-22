@@ -10,7 +10,9 @@ Captions a large dataset of pixel-art video-game images (≥ 280k JPEGs in 110+ 
 `SPEC.md` is the design (source of truth), `TODO.md` the progress ledger, `AGENTS.md` the rules for coding agents.
 `main.py` is the original prototype and is kept unchanged.
 
-Run every command below **from the repo root**: `configs/sources.json` is resolved against the current directory.
+The commands below are written for the repo root. A config finds `sources.json` next to itself, so it works from any
+folder, but `input_dir`, `output_dir` and `model_path` in the configs are relative to the launch folder. Both
+`input_dir` and `output_dir` are required (config or `--input_dir` / `--output_dir`); there is no built-in default.
 
 ---
 

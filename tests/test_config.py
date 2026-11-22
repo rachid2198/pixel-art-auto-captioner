@@ -22,10 +22,13 @@ from pixel_art_auto_captioner.common.config import (
     validate_config,
 )
 
-# Verbatim copy of the SPEC §9.2 example config. DEFAULT_CONFIG must equal it.
+# The SPEC §9.2 example config with the built-in defaults where they differ by
+# design: input_dir / output_dir null (R13), revision null (R4 pins it in the
+# shipped configs only), exclude_sources [] (R9 lists it in the configs) and
+# sources_file launch-folder relative (R12). DEFAULT_CONFIG must equal it.
 SPEC_9_2_JSON = """
 {
-  "input":   { "input_dir": "/data/pixel-art", "extensions": [".png", ".jpg", ".jpeg", ".webp"],
+  "input":   { "input_dir": null, "extensions": [".png", ".jpg", ".jpeg", ".webp"],
                "recursive": true, "include_sources": null, "exclude_sources": [] },
   "model":   { "backend": "vllm",
                "model_path": "fancyfeast/llama-joycaption-beta-one-hf-llava",
@@ -59,7 +62,7 @@ SPEC_9_2_JSON = """
     "sources_file": "configs/sources.json"
   },
   "quality": { "max_retries": 1, "repeat_ngram_threshold": 4, "min_compression_ratio": 0.25 },
-  "output":  { "output_dir": "/data/captions", "write_txt": false, "resume": true, "fsync_every": 100,
+  "output":  { "output_dir": null, "write_txt": false, "resume": true, "fsync_every": 100,
                "qa_sample": 100 },
   "runtime": { "shard": "0/1", "batch_size": 64, "num_workers": 4, "prefetch": 64,
                "max_images": null, "seed": 0, "log_every_s": 30, "log_level": "INFO",
@@ -284,6 +287,79 @@ def test_inline_sources_take_precedence_over_file(tmp_path, monkeypatch):
     assert cfg["prompts"]["sources"] == inline
 
 
+class TestSourcesFileRelativeToConfig:
+    """R12: a relative sources_file in a config file is resolved against that file's folder."""
+
+    def test_found_from_an_unrelated_cwd(self, tmp_path, monkeypatch):
+        _write_json(tmp_path / "cfgdir" / "sources.json", SOURCES)
+        path = _write_json(tmp_path / "cfgdir" / "c.json", {"prompts": {"sources_file": "sources.json"}})
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        _write_json(elsewhere / "sources.json", {"wrong": {"category": "game_crop"}})  # must be ignored
+        monkeypatch.chdir(elsewhere)
+        cfg = load_config(path, {})
+        assert cfg["prompts"]["sources"] == SOURCES
+        assert Path(cfg["prompts"]["sources_file"]) == tmp_path / "cfgdir" / "sources.json"
+
+    def test_nested_relative_path(self, tmp_path, monkeypatch):
+        _write_json(tmp_path / "cfgdir" / "maps" / "s.json", SOURCES)
+        path = _write_json(tmp_path / "cfgdir" / "c.json", {"prompts": {"sources_file": "maps/s.json"}})
+        monkeypatch.chdir(tmp_path)
+        assert load_config(path, {})["prompts"]["sources"] == SOURCES
+
+    def test_relative_config_path(self, tmp_path, monkeypatch):
+        _write_json(tmp_path / "cfgdir" / "sources.json", SOURCES)
+        _write_json(tmp_path / "cfgdir" / "c.json", {"prompts": {"sources_file": "sources.json"}})
+        monkeypatch.chdir(tmp_path)
+        assert load_config(Path("cfgdir/c.json"), {})["prompts"]["sources"] == SOURCES
+
+    def test_absolute_path_unchanged(self, tmp_path, monkeypatch):
+        target = _write_json(tmp_path / "abs" / "sources.json", SOURCES)
+        path = _write_json(tmp_path / "cfgdir" / "c.json", {"prompts": {"sources_file": str(target)}})
+        monkeypatch.chdir(tmp_path)
+        cfg = load_config(path, {})
+        assert cfg["prompts"]["sources_file"] == str(target)
+        assert cfg["prompts"]["sources"] == SOURCES
+
+    def test_without_config_file_stays_cwd_relative(self, tmp_path, monkeypatch):
+        _write_json(tmp_path / "configs" / "sources.json", SOURCES)
+        monkeypatch.chdir(tmp_path)
+        cfg = load_config(None, {})
+        assert cfg["prompts"]["sources_file"] == "configs/sources.json"
+        assert cfg["prompts"]["sources"] == SOURCES
+
+    def test_inherited_default_stays_cwd_relative(self, tmp_path, monkeypatch):
+        # A config that does not set sources_file keeps the launch-folder default.
+        _write_json(tmp_path / "configs" / "sources.json", SOURCES)
+        path = _write_json(tmp_path / "other" / "c.json", {"runtime": {"batch_size": 2}})
+        monkeypatch.chdir(tmp_path)
+        assert load_config(path, {})["prompts"]["sources"] == SOURCES
+
+    def test_missing_file_reported_with_rebased_path(self, tmp_path, monkeypatch):
+        (tmp_path / "in").mkdir()
+        path = _write_json(tmp_path / "cfgdir" / "c.json", {
+            "input": {"input_dir": str(tmp_path / "in")}, "output": {"output_dir": str(tmp_path / "o")},
+            "prompts": {"sources_file": "nope.json"}})
+        monkeypatch.chdir(tmp_path)
+        message = _errors(load_config(path, {}))
+        assert "cfgdir/nope.json" in message and "resolved against that file's folder" in message
+
+    def test_input_and_output_dirs_stay_cwd_relative(self, tmp_path, monkeypatch):
+        path = _write_json(tmp_path / "cfgdir" / "c.json",
+                           {"input": {"input_dir": "data"}, "output": {"output_dir": "out"}})
+        monkeypatch.chdir(tmp_path)
+        cfg = load_config(path, {})
+        assert cfg["input"]["input_dir"] == "data" and cfg["output"]["output_dir"] == "out"
+
+    def test_config_file_not_mutated_on_disk(self, tmp_path, monkeypatch):
+        _write_json(tmp_path / "cfgdir" / "sources.json", SOURCES)
+        path = _write_json(tmp_path / "cfgdir" / "c.json", {"prompts": {"sources_file": "sources.json"}})
+        before = path.read_bytes()
+        monkeypatch.chdir(tmp_path)
+        load_config(path, {})
+        assert path.read_bytes() == before
+
+
 def test_null_sources_file_gives_empty_mapping(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     cfg = load_config(None, {"prompts": {"sources_file": None}})
@@ -292,7 +368,8 @@ def test_null_sources_file_gives_empty_mapping(tmp_path, monkeypatch):
 
 def test_missing_sources_file_left_for_validation(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    cfg = load_config(None, {"input": {"input_dir": str(tmp_path)}})
+    cfg = load_config(None, {"input": {"input_dir": str(tmp_path)},
+                             "output": {"output_dir": str(tmp_path / "out")}})
     assert "sources" not in cfg["prompts"]
     message = _errors(cfg)
     assert "prompts.sources_file" in message and "not found" in message
@@ -340,15 +417,53 @@ def test_both_backends_valid(valid_cfg, backend):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("value", [None, "", 5])
+@pytest.mark.parametrize("value", [None, ""])
 def test_input_dir_required(valid_cfg, value):
     valid_cfg["input"]["input_dir"] = value
-    assert "input.input_dir: is required" in _errors(valid_cfg)
+    message = _errors(valid_cfg)
+    assert "input.input_dir is required (set it in the config or pass --input_dir)" in message
+    assert _problem_count(message) == 1
+
+
+def test_input_dir_wrong_type(valid_cfg):
+    valid_cfg["input"]["input_dir"] = 5
+    assert "input.input_dir: must be a directory path, got 5" in _errors(valid_cfg)
 
 
 def test_input_dir_missing_key(valid_cfg):
     del valid_cfg["input"]["input_dir"]
-    assert "input.input_dir: is required" in _errors(valid_cfg)
+    assert "input.input_dir is required" in _errors(valid_cfg)
+
+
+@pytest.mark.parametrize("value", [None, ""])
+def test_output_dir_required(valid_cfg, value):
+    # R13: no built-in default (a Windows run would otherwise write to \data\captions).
+    valid_cfg["output"]["output_dir"] = value
+    message = _errors(valid_cfg)
+    assert "output.output_dir is required (set it in the config or pass --output_dir)" in message
+    assert _problem_count(message) == 1
+
+
+def test_output_dir_missing_key_and_wrong_type(valid_cfg):
+    del valid_cfg["output"]["output_dir"]
+    assert "output.output_dir is required" in _errors(valid_cfg)
+    valid_cfg["output"]["output_dir"] = 7
+    assert "output.output_dir: must be a directory path, got 7" in _errors(valid_cfg)
+
+
+def test_defaults_alone_report_both_dirs(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    message = _errors(load_config(None, {"prompts": {"sources_file": None}}))
+    assert "input.input_dir is required" in message and "output.output_dir is required" in message
+    assert _problem_count(message) == 2
+
+
+def test_dir_overrides_satisfy_the_requirement(tmp_path):
+    (tmp_path / "in").mkdir()
+    cfg = load_config(None, {"input": {"input_dir": str(tmp_path / "in")},
+                             "output": {"output_dir": str(tmp_path / "out")},
+                             "prompts": {"sources_file": None}})
+    validate_config(cfg)
 
 
 def test_input_dir_does_not_exist(valid_cfg, tmp_path):
@@ -669,7 +784,8 @@ def test_end_to_end_file_and_overrides_validate(tmp_path, monkeypatch):
     _write_json(tmp_path / "configs" / "sources.json", SOURCES)
     path = _write_json(
         tmp_path / "configs" / "local.json",
-        {"input": {"input_dir": "data"}, "model": {"backend": "hf"}, "runtime": {"batch_size": 1}},
+        {"input": {"input_dir": "data"}, "output": {"output_dir": "out"},
+         "model": {"backend": "hf"}, "runtime": {"batch_size": 1}},
     )
     cfg = load_config(path, {"runtime": {"shard": "1/2"}, "generation": {"enabled_caption_types": ["tags"]}})
     validate_config(cfg)

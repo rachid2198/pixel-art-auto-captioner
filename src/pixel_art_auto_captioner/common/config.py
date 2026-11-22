@@ -23,12 +23,15 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 #: Built-in defaults. Mirrors SPEC §9.2 (``configs/example_config.json``) key for
-#: key and value for value. Never mutate it; :func:`load_config` returns a deep
-#: copy. ``prompts.sources`` is intentionally absent: it is filled in by
-#: :func:`load_config` from ``prompts.sources_file`` unless given inline.
+#: key; the values match except ``input_dir`` / ``output_dir`` (``None``,
+#: required, R13), ``model.revision`` (``None``, R4 pins it only in the configs),
+#: ``exclude_sources`` (empty) and ``sources_file`` (launch-folder relative, R12).
+#: Never mutate it; :func:`load_config` returns a deep copy. ``prompts.sources``
+#: is intentionally absent: it is filled in by :func:`load_config` from
+#: ``prompts.sources_file`` unless given inline.
 DEFAULT_CONFIG: dict[str, Any] = {
     "input": {
-        "input_dir": "/data/pixel-art",
+        "input_dir": None,  # required (R13): config file or --input_dir
         "extensions": [".png", ".jpg", ".jpeg", ".webp"],
         "recursive": True,
         "include_sources": None,
@@ -91,11 +94,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "ai_pixel_art": "This image is AI-generated pixel art.",
             "mixed_collection": "",
         },
+        # Without --config this stays relative to the launch folder (R12); config
+        # files set "sources.json", resolved against their own folder.
         "sources_file": "configs/sources.json",
     },
     "quality": {"max_retries": 1, "repeat_ngram_threshold": 4, "min_compression_ratio": 0.25},
     "output": {
-        "output_dir": "/data/captions",
+        "output_dir": None,  # required (R13): config file or --output_dir
         "write_txt": False,
         "resume": True,
         "fsync_every": 100,
@@ -163,7 +168,9 @@ def _resolve_sources(cfg: dict[str, Any]) -> None:
 
     Inline ``prompts.sources`` (any non-null value) wins. Otherwise, if
     ``prompts.sources_file`` is set and the file exists, its JSON object is
-    loaded; a relative path is resolved against the current working directory.
+    loaded. A relative path from a config file was already rebased onto that
+    file's folder by :func:`load_config` (R12); any other relative path is
+    resolved against the current working directory.
     If ``sources_file`` is null, ``sources`` becomes ``{}``. If the file is
     missing, ``sources`` is left unset so :func:`validate_config` reports it
     together with the other problems.
@@ -185,6 +192,17 @@ def _resolve_sources(cfg: dict[str, Any]) -> None:
     logger.info("Loaded %d source mappings from %s", len(prompts["sources"]), path.as_posix())
 
 
+def _rebase_sources_file(file_cfg: dict[str, Any], config_path: Path) -> None:
+    """Make a relative ``prompts.sources_file`` relative to ``config_path``'s folder (R12), in place."""
+    prompts = file_cfg.get("prompts")
+    if not isinstance(prompts, dict):
+        return
+    sources_file = prompts.get("sources_file")
+    if not isinstance(sources_file, str) or not sources_file or Path(sources_file).is_absolute():
+        return  # null, wrong type (reported by validate_config) or absolute: used as is
+    prompts["sources_file"] = (config_path.parent / sources_file).as_posix()
+
+
 def load_config(path: Path | None, overrides: dict) -> dict:
     """Build the effective config: defaults < config file < CLI overrides.
 
@@ -194,10 +212,15 @@ def load_config(path: Path | None, overrides: dict) -> dict:
     ``{"runtime": {"shard": "1/4"}}``; callers must omit flags the user did not
     give, because a ``None`` value is applied as an explicit ``null``.
 
+    A relative ``prompts.sources_file`` set in the config file is resolved
+    against that file's directory before the overrides are merged (R12), so a
+    config works from any launch folder. The default (no ``--config``) stays
+    relative to the current working directory, as do ``input_dir`` and
+    ``output_dir``.
+
     After merging, the effective ``prompts.sources`` mapping is resolved:
-    inline ``prompts.sources`` wins over ``prompts.sources_file`` (a relative
-    path is resolved against the current working directory). A missing sources
-    file is not raised here; :func:`validate_config` reports it.
+    inline ``prompts.sources`` wins over ``prompts.sources_file``. A missing
+    sources file is not raised here; :func:`validate_config` reports it.
 
     The result is not validated; call :func:`validate_config` on it.
     :data:`DEFAULT_CONFIG` and ``overrides`` are never mutated.
@@ -220,6 +243,7 @@ def load_config(path: Path | None, overrides: dict) -> dict:
     if path is not None:
         path = Path(path)
         file_cfg = _read_json_object(path, "Config file")
+        _rebase_sources_file(file_cfg, path)
         cfg = _deep_merge(cfg, file_cfg)
         logger.info("Loaded config file %s", path.as_posix())
     cfg = _deep_merge(cfg, overrides)
@@ -275,13 +299,15 @@ def _parse_shard(value: Any) -> tuple[int, int] | None:
 
 
 def _validate_input(cfg: dict[str, Any], errors: list[str]) -> None:
-    """``input_dir`` exists and is a directory."""
+    """``input_dir`` is set (R13), exists and is a directory."""
     section = _section(cfg, "input", errors)
     if section is None:
         return
     input_dir = section.get("input_dir")
-    if not isinstance(input_dir, str) or not input_dir:
-        errors.append(f"input.input_dir: is required (a directory path), got {input_dir!r}")
+    if input_dir is None or input_dir == "":
+        errors.append("input.input_dir is required (set it in the config or pass --input_dir)")
+    elif not isinstance(input_dir, str):
+        errors.append(f"input.input_dir: must be a directory path, got {input_dir!r}")
     elif not Path(input_dir).exists():
         errors.append(f"input.input_dir: does not exist: {input_dir}")
     elif not Path(input_dir).is_dir():
@@ -376,9 +402,10 @@ def _validate_prompts(cfg: dict[str, Any], errors: list[str]) -> None:
         sources_file = section.get("sources_file")
         if sources_file is not None:
             errors.append(
-                f"prompts.sources_file: file not found: {sources_file!r} (relative paths "
-                f"are resolved against the current directory; set it to null or give "
-                f"prompts.sources inline to run without a source mapping)"
+                f"prompts.sources_file: file not found: {sources_file!r} (a relative path in a "
+                f"config file is resolved against that file's folder, otherwise against the "
+                f"current directory; set it to null or give prompts.sources inline to run "
+                f"without a source mapping)"
             )
         return
     if not isinstance(sources, dict):
@@ -396,10 +423,15 @@ def _validate_prompts(cfg: dict[str, Any], errors: list[str]) -> None:
 
 
 def _validate_output(cfg: dict[str, Any], errors: list[str]) -> None:
-    """``fsync_every`` is a positive int."""
+    """``output_dir`` is set (R13); ``fsync_every`` is a positive int."""
     section = _section(cfg, "output", errors)
     if section is None:
         return
+    output_dir = section.get("output_dir")
+    if output_dir is None or output_dir == "":
+        errors.append("output.output_dir is required (set it in the config or pass --output_dir)")
+    elif not isinstance(output_dir, str):
+        errors.append(f"output.output_dir: must be a directory path, got {output_dir!r}")
     _check_positive_int(section.get("fsync_every"), "output.fsync_every", errors)
 
 
@@ -427,7 +459,8 @@ def validate_config(cfg: dict) -> None:
 
     Rules:
 
-    - ``input.input_dir`` exists and is a directory.
+    - ``input.input_dir`` and ``output.output_dir`` are set (R13, no default);
+      ``input.input_dir`` exists and is a directory.
     - ``model.backend`` in {vllm, hf}; ``model.dtype`` in {bfloat16, float16,
       float32}; ``model.hf.quantization`` in {nf4, int8, null}.
     - ``generation.enabled_caption_types`` is non-empty and each entry exists in

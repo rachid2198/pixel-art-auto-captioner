@@ -12,6 +12,9 @@
       "device_map": 0
     }
   },
+  "prompts": {
+    "sources_file": "sources.json"
+  },
   "output": {
     "output_dir": "./output",
     "write_txt": false,

@@ -15,8 +15,8 @@ FROM vllm/vllm-openai:v0.33.0
 ENV HF_HOME=/workspace/hf-cache \
     PYTHONUNBUFFERED=1
 
-# configs/sources.json is resolved against the current directory, so the
-# image runs from the repo copy.
+# The repo copy lives in /app. The configs find sources.json next to
+# themselves (R12), so the launch folder does not matter for them.
 WORKDIR /app
 
 # Copy only what the package and scripts need (no Models/, input/, output/,
