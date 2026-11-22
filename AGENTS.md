@@ -141,6 +141,14 @@ Same seed + same backend + same versions + same GPU type ≈ same text. vLLM out
 
 Steps 1–13 were tested only in a Linux sandbox. On Windows watch for: text files opened without `encoding="utf-8"` (default cp1252), CRLF written by tools (R11), `\` vs `/` in paths stored on disk (always `as_posix()`), case-insensitive file names hiding collisions, `signal.SIGTERM` handling (Windows delivers Ctrl-C/Ctrl-Break, not SIGTERM), files that cannot be deleted or renamed while open (temp dirs, fsync tests), and bash-only tests that must skip cleanly.
 
+### 6.10 bitsandbytes skip names and pre-quantized checkpoints
+
+transformers 5.x skips a module from quantization only if a `llm_int8_skip_modules` entry matches the **start** of the full module name (or its end). LLaVA's modules are `model.vision_tower.*` / `model.multi_modal_projector.*`, so the entries must carry the `model.` prefix; bare `vision_tower` silently quantizes the vision tower (TODO C9 notes, W7). A checkpoint that already contains a `quantization_config` overrides the one passed to `from_pretrained`: use the original bf16 weights (W5). Only the GPU test `test_vision_tower_and_projector_not_quantized` catches either.
+
+### 6.11 PowerShell eats backticks
+
+In a double-quoted PowerShell string, a backtick is the escape character, so ```` `` ```` becomes one backtick and a scripted `.Replace()` on reST/Markdown text silently stops matching. Edit files with backticks using the Edit tool, or use single-quoted strings.
+
 ---
 
 ## 7. Environments

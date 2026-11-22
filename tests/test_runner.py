@@ -959,6 +959,40 @@ class TestInterrupt:
             runner._on_sigterm(signal.SIGTERM, None)
         assert runner._stopping is True
 
+    @pytest.mark.skipif(not hasattr(signal, "SIGBREAK"), reason="SIGBREAK exists only on Windows")
+    def test_sigbreak_handled_like_sigterm_and_restored(self, cfg) -> None:
+        # C9 W6: Ctrl-Break on Windows stops gracefully too.
+        before = signal.getsignal(signal.SIGBREAK)
+        seen = []
+        runner, _ = make_runner(cfg, FakeModel(
+            batch_hook=lambda m, r: seen.append(signal.getsignal(signal.SIGBREAK))))
+        runner.run()
+        assert seen and all(h == runner._on_sigterm for h in seen)
+        assert signal.getsignal(signal.SIGBREAK) == before
+        runner2, _ = make_runner(cfg)
+        with pytest.raises(KeyboardInterrupt, match="SIGBREAK"):
+            runner2._on_sigterm(signal.SIGBREAK, None)
+
+    def test_sigbreak_interrupt_writes_interrupted_manifest(self, tmp_path, dataset,
+                                                            restore_sigterm) -> None:
+        signum = getattr(signal, "SIGBREAK", signal.SIGTERM)
+
+        def hook(model, requests):
+            if len(model.batches) == 2:
+                handler = signal.getsignal(signum)
+                handler(signum, None)
+
+        cfg = build_config(tmp_path, dataset)
+        runner, model = make_runner(cfg, FakeModel(batch_hook=hook))
+        with pytest.raises(KeyboardInterrupt):
+            runner.run()
+        manifest = only_manifest(cfg)
+        assert manifest["interrupted"] is True and model.unload_calls == 1
+
+    def test_signal_name(self) -> None:
+        assert runner_mod._signal_name(signal.SIGTERM) == "SIGTERM"
+        assert runner_mod._signal_name(9999) == "signal 9999"
+
     def test_run_off_the_main_thread(self, cfg, restore_sigterm) -> None:
         seen: list = []
         result: dict = {}

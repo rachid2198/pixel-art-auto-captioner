@@ -391,7 +391,7 @@ class TestConstruction:
             "device_map": 0,
         }
         assert DEFAULT_GEN_PARAMS == {"max_new_tokens": 512, "temperature": 0.6, "top_p": 0.9, "top_k": None}
-        assert {"vision_tower", "multi_modal_projector"} <= set(QUANT_SKIP_MODULES)
+        assert QUANT_SKIP_MODULES == ("model.vision_tower", "model.multi_modal_projector", "lm_head")
 
     def test_module_logger(self) -> None:
         assert joycaption_hf.logger.name == "pixel_art_auto_captioner.captioning.joycaption_hf"
@@ -581,9 +581,58 @@ class TestQuantization:
     def test_vision_tower_and_projector_are_skipped(self, make, fakes, quantization: str) -> None:
         make().load({"hf": {"quantization": quantization}})
         skip = fakes.tf.bnb_configs[0].kwargs["llm_int8_skip_modules"]
-        assert "vision_tower" in skip and "multi_modal_projector" in skip
+        assert "model.vision_tower" in skip and "model.multi_modal_projector" in skip
         assert "lm_head" in skip  # explicit list replaces transformers' default (lm_head)
         assert isinstance(skip, list)
+
+
+def _skipped_by_transformers_5(full_name: str, patterns: list[str]) -> bool:
+    """Stand-in for transformers 5.12 ``quantizers_utils.should_convert_module`` (negated).
+
+    A module is skipped if a pattern ``re.match``-es from the start of its full
+    name (with or without a trailing dot) or the name ends with the pattern.
+    Copied here so the CPU suite needs no transformers (AGENTS.md §5).
+    """
+    import re
+
+    return any(re.match(f"{key}\\.", full_name) or re.match(f"{key}", full_name) or full_name.endswith(key)
+               for key in patterns)
+
+
+def _skipped_by_transformers_4(full_name: str, patterns: list[str]) -> bool:
+    """Stand-in for the transformers 4.x rule: plain substring match."""
+    return any(key in full_name for key in patterns)
+
+
+class TestQuantSkipNames:
+    """C9 W7: the skip names must match the real LLaVA module names (transformers 5.12)."""
+
+    VISION = [
+        # Names as reported by the GPU test on transformers 5.12 (C9 notes, W7).
+        "model.vision_tower.encoder.layers.0.self_attn.k_proj",
+        "model.vision_tower.encoder.layers.26.mlp.fc1",
+        "model.vision_tower.head.attention.out_proj",
+        "model.multi_modal_projector.linear_1",
+        "model.multi_modal_projector.linear_2",
+        "lm_head",
+    ]
+    LANGUAGE = [
+        "model.language_model.layers.0.self_attn.q_proj",
+        "model.language_model.layers.31.mlp.down_proj",
+    ]
+
+    @pytest.mark.parametrize("rule", [_skipped_by_transformers_5, _skipped_by_transformers_4])
+    def test_vision_and_projector_skipped_language_model_quantized(self, rule) -> None:
+        patterns = list(QUANT_SKIP_MODULES)
+        for name in self.VISION:
+            assert rule(name, patterns), name
+        for name in self.LANGUAGE:
+            assert not rule(name, patterns), name
+
+    def test_bare_spec_names_fail_under_transformers_5(self) -> None:
+        # Documents the W7 bug: the literal SPEC §6.2 names miss the 5.x module names.
+        assert not _skipped_by_transformers_5("model.vision_tower.encoder.layers.0.mlp.fc1",
+                                              ["vision_tower", "multi_modal_projector"])
 
     def test_nf4_compute_dtype_follows_dtype(self, make, fakes) -> None:
         make().load({"dtype": "float16"})

@@ -25,6 +25,7 @@ import io
 import json
 import logging
 import os
+import pathlib
 import random
 import shutil
 import stat
@@ -196,6 +197,13 @@ def write_guard(monkeypatch: pytest.MonkeyPatch):
                 return guarded
 
             monkeypatch.setattr(opener_owner, attr, make(real))
+
+        # Python 3.10: Path.open/write_text call pathlib._NormalAccessor.open, which
+        # holds io.open bound at import time, so patching io.open misses them (C9, W2).
+        # staticmethod: a plain function on the class would get the accessor as `file`.
+        accessor = getattr(pathlib, "_NormalAccessor", None)
+        if accessor is not None and "open" in vars(accessor):
+            monkeypatch.setattr(accessor, "open", staticmethod(make(vars(accessor)["open"])))
 
         for name in ("replace", "rename", "unlink", "remove", "rmdir", "mkdir", "makedirs",
                      "utime", "chmod", "symlink", "link", "truncate"):
@@ -824,6 +832,12 @@ class TestInputReadOnly:
         fd = os.open(input_dir / "probe3", os.O_WRONLY | os.O_CREAT)
         os.close(fd)
         assert len(violations) == 3
+        with (input_dir / "probe4.txt").open("a", encoding="utf-8") as fh:  # Path.open (3.10 accessor)
+            fh.write("x")
+        with open(input_dir / "probe5.txt", "w", encoding="utf-8") as fh:
+            fh.write("x")
+        assert len(violations) == 5
+        assert (input_dir / "probe4.txt").read_text(encoding="utf-8") == "x"  # reads still work
 
     def test_input_files_opened_read_only_without_following_symlinks(self, dirs, monkeypatch):
         input_dir, out_dir = dirs

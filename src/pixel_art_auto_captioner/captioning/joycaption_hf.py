@@ -74,11 +74,18 @@ DEFAULT_GEN_PARAMS: dict[str, Any] = {
     "top_k": None,
 }
 
-#: Modules kept out of bitsandbytes quantization. ``vision_tower`` and
-#: ``multi_modal_projector`` per SPEC §6.2; ``lm_head`` because an explicit
+#: Modules kept out of bitsandbytes quantization: the vision tower and the
+#: projector (SPEC §6.2) and ``lm_head``, because an explicit
 #: ``llm_int8_skip_modules`` list replaces transformers' default skip list
 #: (which is ``lm_head``), so it must be listed to stay unquantized as in v1.0.
-QUANT_SKIP_MODULES: tuple[str, ...] = ("vision_tower", "multi_modal_projector", "lm_head")
+#:
+#: The names are anchored at the start of the full module name (C9, W7):
+#: transformers 5.x skips a module only if a pattern ``re.match``-es from the
+#: start of its name or the name ends with it, and in 5.x the LLaVA modules are
+#: ``model.vision_tower.*`` / ``model.multi_modal_projector.*``. The bare names
+#: of SPEC §6.2 matched as substrings in 4.x but never match in 5.x, which left
+#: the vision tower in 4-bit. The prefixed names work with both rules.
+QUANT_SKIP_MODULES: tuple[str, ...] = ("model.vision_tower", "model.multi_modal_projector", "lm_head")
 
 _DTYPES: tuple[str, ...] = ("bfloat16", "float16", "float32")
 _QUANTIZATIONS: tuple[str | None, ...] = ("nf4", "int8", None)
@@ -464,12 +471,12 @@ class JoyCaptionHFModel(CaptionModel):
         except Exception as exc:
             if oom_type is not None and isinstance(exc, oom_type):
                 logger.error(
-                    "CUDA out of memory on %s (%s); re-raising", request.image_rel_path, request.caption_type
+                    "CUDA out of memory on %s (%s); re-raising", request.image_rel_path.as_posix(), request.caption_type
                 )
                 raise
             logger.warning(
                 "caption failed for %s (%s, attempt %s): %s",
-                request.image_rel_path,
+                request.image_rel_path.as_posix(),
                 request.caption_type,
                 request.attempt,
                 _error_text(exc),
@@ -483,7 +490,7 @@ class JoyCaptionHFModel(CaptionModel):
         finish_reason = "length" if hit_limit and not ended_with_eos else "stop"
         logger.debug(
             "captioned %s (%s): %d tokens, finish_reason=%s",
-            request.image_rel_path,
+            request.image_rel_path.as_posix(),
             request.caption_type,
             num_output_tokens,
             finish_reason,

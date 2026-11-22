@@ -493,7 +493,7 @@ class JoyCaptionVLLMModel(CaptionModel):
         """Log a per-request failure and return its error result."""
         logger.warning(
             "caption failed for %s (%s, attempt %s): %s",
-            request.image_rel_path,
+            request.image_rel_path.as_posix(),
             request.caption_type,
             request.attempt,
             _error_text(exc),
@@ -523,7 +523,7 @@ class JoyCaptionVLLMModel(CaptionModel):
             error = f"vLLM finish_reason {raw_reason!r} (expected 'stop' or 'length')"
             logger.warning(
                 "caption failed for %s (%s, attempt %s): %s",
-                request.image_rel_path,
+                request.image_rel_path.as_posix(),
                 request.caption_type,
                 request.attempt,
                 error,
@@ -532,7 +532,7 @@ class JoyCaptionVLLMModel(CaptionModel):
 
         logger.debug(
             "captioned %s (%s): %d tokens, finish_reason=%s",
-            request.image_rel_path,
+            request.image_rel_path.as_posix(),
             request.caption_type,
             num_output_tokens,
             finish_reason,

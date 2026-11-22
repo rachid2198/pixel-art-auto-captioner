@@ -23,8 +23,9 @@
 ``KeyboardInterrupt`` and ``SIGTERM`` stop the run: the in-flight batch is
 abandoned, the writer is flushed and closed, the model unloaded, the manifest
 written with ``"interrupted": true``, and the ``KeyboardInterrupt`` re-raised
-(``SIGTERM`` is turned into a ``KeyboardInterrupt`` by a handler installed for
-the duration of the run, on the main thread only).
+(``SIGTERM``, and ``SIGBREAK``/Ctrl-Break on Windows, are turned into a
+``KeyboardInterrupt`` by a handler installed for the duration of the run, on
+the main thread only).
 
 ``failures/shard-<iii>-of-<NNN>.jsonl`` (§8.1) holds two kinds of lines:
 
@@ -865,43 +866,55 @@ class CaptionRunner:
             return {}
 
     # ------------------------------------------------------------------
-    # SIGTERM
+    # SIGTERM (and SIGBREAK on Windows)
     # ------------------------------------------------------------------
 
     def _install_sigterm_handler(self) -> Any:
-        """Turn SIGTERM into ``KeyboardInterrupt`` for the run; return the old handler.
+        """Turn SIGTERM (and Windows' Ctrl-Break, SIGBREAK) into ``KeyboardInterrupt``.
 
-        Only possible on the main thread; elsewhere nothing is installed.
+        SIGBREAK is handled like SIGTERM so a Ctrl-Break on Windows also stops
+        gracefully (flush, unload, manifest; C9, W6). Only possible on the main
+        thread; elsewhere nothing is installed.
+
+        Returns:
+            ``{signum: previous handler}`` for the handlers installed (empty when
+            none could be installed).
         """
-        sigterm = getattr(signal, "SIGTERM", None)
-        if sigterm is None or threading.current_thread() is not threading.main_thread():
+        signums = [s for s in (getattr(signal, "SIGTERM", None), getattr(signal, "SIGBREAK", None))
+                   if s is not None]
+        if not signums or threading.current_thread() is not threading.main_thread():
             logger.debug("Not on the main thread: SIGTERM handler not installed")
-            return None
-        try:
-            previous = signal.getsignal(sigterm)
-            signal.signal(sigterm, self._on_sigterm)
-        except (ValueError, OSError, RuntimeError) as exc:
-            logger.debug("SIGTERM handler not installed: %s", exc)
-            return None
-        self._sigterm_installed = True
+            return {}
+        previous: dict[int, Any] = {}
+        for signum in signums:
+            try:
+                old = signal.getsignal(signum)
+                signal.signal(signum, self._on_sigterm)
+            except (ValueError, OSError, RuntimeError) as exc:
+                logger.debug("Handler for signal %s not installed: %s", signum, exc)
+                continue
+            previous[signum] = old
+        self._sigterm_installed = bool(previous)
         return previous
 
     def _restore_sigterm_handler(self, previous: Any) -> None:
         if not self._sigterm_installed:
             return
         self._sigterm_installed = False
-        try:
-            signal.signal(signal.SIGTERM, previous if previous is not None else signal.SIG_DFL)
-        except (ValueError, OSError, RuntimeError, TypeError) as exc:
-            logger.warning("Could not restore the previous SIGTERM handler: %s", exc)
+        for signum, old in (previous or {}).items():
+            try:
+                signal.signal(signum, old if old is not None else signal.SIG_DFL)
+            except (ValueError, OSError, RuntimeError, TypeError) as exc:
+                logger.warning("Could not restore the previous handler for signal %s: %s", signum, exc)
 
     def _on_sigterm(self, signum: int, frame: FrameType | None) -> None:
+        name = _signal_name(signum)
         if self._stopping:
-            logger.warning("SIGTERM received while shutting down; finishing the shutdown")
+            logger.warning("%s received while shutting down; finishing the shutdown", name)
             return
         self._stopping = True
-        logger.warning("SIGTERM received: stopping the run")
-        raise KeyboardInterrupt("SIGTERM")
+        logger.warning("%s received: stopping the run", name)
+        raise KeyboardInterrupt(name)
 
 
 # ---------------------------------------------------------------------------
@@ -1008,6 +1021,14 @@ def _versions() -> dict[str, str | None]:
         "pillow": getattr(PIL, "__version__", None),
         "platform": platform.platform(),
     }
+
+
+def _signal_name(signum: int) -> str:
+    """``"SIGTERM"`` / ``"SIGBREAK"`` for a signal number (``"signal N"`` if unknown)."""
+    try:
+        return signal.Signals(signum).name
+    except ValueError:
+        return f"signal {signum}"
 
 
 def _git_sha(start_dirs: Iterable[Path] | None = None) -> str | None:
