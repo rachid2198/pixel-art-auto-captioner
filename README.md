@@ -64,7 +64,7 @@ Precedence: CLI flag > config file > built-in defaults (`common/config.py`). All
 |---|---|
 | `configs/example_config.json` | Cloud defaults: vLLM, bf16, `input_dir` `/workspace/pixel-art`, `output_dir` `/workspace/captions` |
 | `configs/local_hf_config.json` | RTX 3060: HF backend, NF4 at load, bf16 weights in `./Models/llama-joycaption-beta-one-bf16`, images in `./input`, output in `./output`, small batches |
-| `configs/sources.json` | Source folder → category + display name used in the prompts. **Draft, awaiting your approval** (TODO.md step 11 notes) |
+| `configs/sources.json` | Source folder → category + display name used in the prompts (approved 2026-11-15, R8; 107 folders, of which the configs exclude 41 via `input.exclude_sources`, R9) |
 
 Caption types (`long`, `short`, `tags`, `sd_prompt`) are defined in the config; `generation.enabled_caption_types`
 (or `--caption_types`) picks the ones to run. Unknown source folders use `prompts.default_category`.
@@ -177,10 +177,12 @@ One **network volume**, in a datacenter that supports RunPod's S3-compatible API
 1. **Pack locally** (once; the dataset is only read):
 
    ```powershell
-   .\.env\Scripts\python.exe scripts\pack_dataset.py --input_dir F:\Work\datasets\pixel-art --out_dir F:\Work\datasets\pixel-art-tars
+   $exclude = (Get-Content configs\example_config.json -Raw | ConvertFrom-Json).input.exclude_sources
+   .\.env\Scripts\python.exe scripts\pack_dataset.py --input_dir F:\Work\datasets\pixel-art --out_dir F:\Work\datasets\pixel-art-tars --exclude_sources $exclude
    ```
 
-   `out_dir` must be outside the dataset. Re-running continues an interrupted pack and skips complete tars; delete
+   `--exclude_sources` gets the same 41 sources the configs exclude (R9), so the tars hold only the 66 captioned
+   sources (781,686 images on 2026-11-15). `out_dir` must be outside the dataset. Re-running continues an interrupted pack and skips complete tars; delete
    stale tars it warns about before uploading.
 
 2. **Upload** the tars, `manifest.json` and `SHA256SUMS` with the AWS CLI against the volume's S3 API. Create an

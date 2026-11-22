@@ -7,10 +7,6 @@
     "category": "game_crop",
     "name": "Aground"
   },
-  "ai-war": {
-    "category": "game_crop",
-    "name": "AI War: Fleet Command"
-  },
   "apotheon": {
     "category": "game_crop",
     "name": "Apotheon"
@@ -103,17 +99,9 @@
     "category": "game_crop",
     "name": "Dead Cells"
   },
-  "destroy-all-humans": {
-    "category": "game_crop",
-    "name": "Destroy All Humans!"
-  },
   "dig-deep-in-galaxies": {
     "category": "game_crop",
-    "name": "Dig Deep in Galaxies"
-  },
-  "distant-worlds": {
-    "category": "game_crop",
-    "name": "Distant Worlds: Universe"
+    "name": "DIG - Deep In Galaxies"
   },
   "dogolrax": {
     "category": "game_crop",
@@ -207,10 +195,6 @@
     "category": "game_crop",
     "name": "Hotline Miami"
   },
-  "icarus": {
-    "category": "game_crop",
-    "name": "Icarus"
-  },
   "iconoclasts": {
     "category": "game_crop",
     "name": "Iconoclasts"
@@ -268,7 +252,7 @@
     "name": "Metro: Last Light"
   },
   "metroid-fusion-dataset": {
-    "category": "sprite_sheet",
+    "category": "game_crop",
     "name": "Metroid Fusion"
   },
   "midjourney-dataset": {
@@ -372,7 +356,7 @@
     "name": "SteamWorld Dig"
   },
   "super-metroid-redesign-dataset": {
-    "category": "sprite_sheet",
+    "category": "game_crop",
     "name": "Super Metroid Redesign"
   },
   "synthetik-legion-rising": {

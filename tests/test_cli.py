@@ -1020,6 +1020,84 @@ def read_json(name: str) -> dict:
     return json.loads((CONFIGS / name).read_text(encoding="utf-8"))
 
 
+#: The 41 sources excluded by the user (R9, SPEC §9.2), in SPEC order.
+EXCLUDED_SOURCES = [
+    "fallout 2", "mark-of-the-ninja", "tyranny", "steamworld-dig", "factorio", "fallout", "nine-sols",
+    "lies-of-p", "craft-the-world", "oxygen-not-included", "darkest-dungeon", "dustforce",
+    "a-valley-without-wind", "hollow-knight", "barotrauma", "nom-nom-galaxy", "lobotomy-corporation",
+    "apotheon", "hades", "rimworld", "cult-of-the-lamb", "industries-of-titan", "the-vagrant",
+    "metro-last-light", "turing-complete", "hardcore-mecha", "highfleet", "space-rangers-hd-a-war-apart",
+    "empires-of-the-undergrowth", "cavalry-girls", "dyson-sphere-program", "the-last-federation", "aquaria",
+    "helldivers", "prey", "terra-invicta", "trappist", "synthetik-legion-rising", "dave-the-diver",
+    "pinterest-dataset-video-game", "pinterest-dataset-game",
+]
+
+
+class TestSourcesAndExclusions:
+    """R8 (sources.json answers of 2026-11-15) and R9 (41 excluded sources)."""
+
+    def test_exclude_list_in_both_configs(self) -> None:
+        assert len(EXCLUDED_SOURCES) == len(set(EXCLUDED_SOURCES)) == 41
+        for name in ("example_config.json", "local_hf_config.json"):
+            assert read_json(name)["input"]["exclude_sources"] == EXCLUDED_SOURCES, name
+
+    def test_every_folder_is_mapped_and_66_are_kept(self) -> None:
+        # The 2026-11-15 count: 107 folders, all mapped; 41 excluded leaves 66 sources.
+        sources = read_json("sources.json")
+        assert len(sources) == 107
+        assert set(EXCLUDED_SOURCES) <= set(sources)
+        kept = [s for s in sources if s not in EXCLUDED_SOURCES]
+        assert len(kept) == 66
+        assert {"ghost-1.0", "dead-cells", "pinterest-pixel-art-2023-07-01-v3", "midjourney-dataset",
+                "pixel-art-dataset"} <= set(kept)
+        collections = [s for s in kept if sources[s]["category"] != "game_crop"]
+        assert sorted(collections) == ["midjourney-dataset", "pinterest-pixel-art-2023-07-01-v3",
+                                       "pixel-art-dataset"]  # 63 games + 3 collections
+
+    def test_deleted_folders_removed(self) -> None:
+        sources = read_json("sources.json")
+        for gone in ("ai-war", "distant-worlds", "destroy-all-humans", "icarus"):
+            assert gone not in sources
+
+    @pytest.mark.parametrize(("folder", "category", "title"), [
+        ("halcyon-6", "game_crop", "Halcyon 6: Starbase Commander"),
+        ("sea-start", "game_crop", "Sea of Stars"),
+        ("dig-deep-in-galaxies", "game_crop", "DIG - Deep In Galaxies"),
+        ("dogolrax", "game_crop", "Dogolrax"),
+        ("last-command", "game_crop", "Last Command"),
+        ("mistward", "game_crop", "Mistward"),
+        ("trappist", "game_crop", "Trappist"),
+        ("within-a-dead-city", "game_crop", "Within a Dead City"),
+        ("the-library-of-babel", "game_crop", "The Library of Babel"),
+        ("metroid-fusion-dataset", "game_crop", "Metroid Fusion"),
+        ("super-metroid-redesign-dataset", "game_crop", "Super Metroid Redesign"),
+    ])
+    def test_r8_answers(self, folder, category, title) -> None:
+        entry = read_json("sources.json")[folder]
+        assert (entry["category"], entry["name"]) == (category, title)
+
+    @pytest.mark.parametrize("folder", ["pinterest-pixel-art-2023-07-01-v3", "pinterest-dataset-video-game",
+                                        "pinterest-dataset-game", "pixel-art-dataset"])
+    def test_collections_stay_mixed(self, folder) -> None:
+        assert read_json("sources.json")[folder]["category"] == "mixed_collection"
+
+    def test_midjourney_stays_ai_pixel_art(self) -> None:
+        assert read_json("sources.json")["midjourney-dataset"]["category"] == "ai_pixel_art"
+
+    def test_dry_run_on_synthetic_tree_plans_only_kept_sources(self, capsys, tmp_path) -> None:
+        # One image per mapped folder (107) plus an unmapped folder without images.
+        data = make_dataset(tmp_path / "pixel-art",
+                            [f"{folder}/{i:06d}.png" for i, folder in enumerate(read_json("sources.json"))])
+        (data / "notes-only").mkdir()
+        (data / "notes-only" / "readme.md").write_text("not an image", encoding="utf-8")
+        r = dry_run(capsys, "--config", str(CONFIGS / "example_config.json"), "--input_dir", str(data),
+                    "--output_dir", str(tmp_path / "o"))
+        assert r["images_planned"] == 66
+        assert r["images_discovered"] == 66
+        sources = r["captions_by_source"]
+        assert len(sources) == 66 and not set(sources) & set(EXCLUDED_SOURCES)
+
+
 class TestShippedConfigs:
     @pytest.fixture(autouse=True)
     def _repo_cwd(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1042,7 +1120,8 @@ class TestShippedConfigs:
     def test_dry_run_with_shipped_config(self, name, capsys, dataset, tmp_path) -> None:
         r = dry_run(capsys, "--config", str(CONFIGS / name), "--input_dir", str(dataset),
                     "--output_dir", str(tmp_path / "o"))
-        assert r["images_planned"] == 5
+        assert r["images_planned"] == 4  # hades is one of the 41 excluded sources (R9)
+        assert "hades" not in r["captions_by_source"]
 
     def test_example_is_spec_9_2_with_runpod_paths(self) -> None:
         example = read_json("example_config.json")
@@ -1051,6 +1130,7 @@ class TestShippedConfigs:
         expected["output"]["output_dir"] = "/workspace/captions"
         expected["model"]["revision"] = PINNED_REVISION  # R4: the example pins the revision
         expected["prompts"]["sources_file"] = "sources.json"  # R12: next to the config
+        expected["input"]["exclude_sources"] = EXCLUDED_SOURCES  # R9
         assert example == expected
         assert list(example) == list(DEFAULT_CONFIG)
         assert example["model"]["backend"] == "vllm"
@@ -1136,9 +1216,8 @@ class TestSourcesJson:
     @pytest.mark.parametrize(
         "folder",
         ["pinterest-dataset-game", "pinterest-dataset-video-game",
-         "pinterest-pixel-art-2023-07-01-v3", "pixel-art-dataset", "metroid-fusion-dataset",
-         "super-metroid-redesign-dataset", "midjourney-dataset"],
-    )
+         "pinterest-pixel-art-2023-07-01-v3", "pixel-art-dataset", "midjourney-dataset"],
+    )  # the two Metroid folders became game_crop on 2026-11-15 (R8)
     def test_collections_are_not_game_crops(self, folder) -> None:
         assert read_json("sources.json")[folder]["category"] != "game_crop"
 
