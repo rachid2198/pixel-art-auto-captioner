@@ -66,6 +66,8 @@ Precedence: CLI flag > config file > built-in defaults (`common/config.py`). All
 
 Caption types (`long`, `short`, `tags`, `sd_prompt`) are defined in the config; `generation.enabled_caption_types`
 (or `--caption_types`) picks the ones to run. Unknown source folders use `prompts.default_category`.
+The system prompt is fixed (`"You are a helpful image captioner."`) and recorded in the run manifest; a config that
+still sets `prompts.system` is rejected.
 
 Both configs pin `model.revision` to `ebf414ea497a020da0f82df3913e5b6cb8e9663a`; the run manifest also records
 `resolved_revision`, the commit actually loaded. The local config expects the **original bf16 weights** (the HF

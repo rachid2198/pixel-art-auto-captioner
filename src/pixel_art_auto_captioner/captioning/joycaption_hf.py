@@ -299,6 +299,7 @@ class JoyCaptionHFModel(CaptionModel):
             ``model_name``, ``backend``, ``model_path``, ``revision`` (as
             configured, ``None`` if unset), ``resolved_revision`` (the commit
             hash actually loaded, ``None`` for a plain local folder; R4),
+            ``system_prompt`` (the fixed :data:`SYSTEM_PROMPT`; R6),
             ``dtype``, ``quantization``,
             ``device_map``, ``quant_skip_modules`` (``None`` without
             quantization) and ``torch_version``, ``transformers_version``,
@@ -315,6 +316,7 @@ class JoyCaptionHFModel(CaptionModel):
             "model_path": settings.get("model_path"),
             "revision": settings.get("revision"),
             "resolved_revision": self._resolved_revision,
+            "system_prompt": SYSTEM_PROMPT,
             "dtype": settings.get("dtype"),
             "quantization": quantization,
             "device_map": settings.get("device_map"),

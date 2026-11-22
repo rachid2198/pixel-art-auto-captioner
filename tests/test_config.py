@@ -47,7 +47,6 @@ SPEC_9_2_JSON = """
     }
   },
   "prompts": {
-    "system": "You are a helpful image captioner.",
     "template": "{instruction} {context} {constraints}",
     "constraints": "Do not mention the image resolution.",
     "default_category": "mixed_collection",
@@ -644,6 +643,19 @@ def test_empty_section_still_checked(valid_cfg):
                 "runtime.load_failure_alarm"]:
         assert key in message, key
     assert "runtime.max_images" not in message  # absent == null, which is allowed
+
+
+def test_prompts_system_is_not_a_default():
+    assert "system" not in DEFAULT_CONFIG["prompts"]  # R6
+
+
+@pytest.mark.parametrize("value", ["You are a helpful image captioner.", "Be terse.", None, ""])
+def test_prompts_system_rejected_with_clear_message(valid_cfg, value):
+    valid_cfg["prompts"]["system"] = value
+    message = _errors(valid_cfg)
+    assert "prompts.system: no longer supported (R6)" in message
+    assert "system prompt is fixed" in message
+    assert _problem_count(message) == 1
 
 
 def test_non_dict_config_raises():

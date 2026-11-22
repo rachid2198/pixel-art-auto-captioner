@@ -82,7 +82,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
         },
     },
     "prompts": {
-        "system": "You are a helpful image captioner.",
         "template": "{instruction} {context} {constraints}",
         "constraints": "Do not mention the image resolution.",
         "default_category": "mixed_collection",
@@ -351,10 +350,15 @@ def _validate_generation(cfg: dict[str, Any], errors: list[str]) -> None:
 
 
 def _validate_prompts(cfg: dict[str, Any], errors: list[str]) -> None:
-    """Sources resolvable; every referenced category and ``default_category`` exist."""
+    """Sources resolvable; every referenced category and ``default_category`` exist; no ``system`` (R6)."""
     section = _section(cfg, "prompts", errors)
     if section is None:
         return
+    if "system" in section:
+        errors.append(
+            "prompts.system: no longer supported (R6); the system prompt is fixed "
+            "(\"You are a helpful image captioner.\") and recorded in the run manifest. Remove the key"
+        )
     categories = section.get("categories")
     if not isinstance(categories, dict):
         errors.append(f"prompts.categories: must be an object, got {categories!r}")
@@ -432,6 +436,7 @@ def validate_config(cfg: dict) -> None:
       ``prompts.categories``; ``prompts.default_category`` exists. If the
       sources mapping could not be resolved because ``prompts.sources_file``
       does not exist, that is reported too.
+    - ``prompts.system`` is absent (R6: the system prompt is a fixed constant).
     - ``runtime.shard`` parses as ``i/N`` with ``0 <= i < N``.
     - Positive ints: ``runtime.batch_size``, every caption type's
       ``max_new_tokens``, ``output.fsync_every``, ``runtime.log_every_s``,

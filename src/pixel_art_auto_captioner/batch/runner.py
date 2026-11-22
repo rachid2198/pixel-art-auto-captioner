@@ -35,9 +35,9 @@ the duration of the run, on the main thread only).
 
 Resume never reads ``failures/``, so a load failure is retried on the next run.
 
-``prompts.system`` is not passed to the backends: ``load()`` receives only the
-``model`` section and ``CaptionRequest`` has no system field, so the backends
-use their §6.2 system-prompt constant (see TODO open questions).
+There is no configurable system prompt (R6): the backends use their fixed §6.2
+constant and report it as ``system_prompt`` in ``describe()``, which goes into
+the run manifest.
 
 This module may import ``common``, ``ingestion`` and ``captioning``; it never
 imports ``torch``, ``transformers`` or ``vllm`` (SPEC §2.2).

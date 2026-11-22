@@ -65,7 +65,6 @@
     }
   },
   "prompts": {
-    "system": "You are a helpful image captioner.",
     "template": "{instruction} {context} {constraints}",
     "constraints": "Do not mention the image resolution.",
     "default_category": "mixed_collection",

@@ -349,8 +349,10 @@ class JoyCaptionVLLMModel(CaptionModel):
 
         Returns:
             ``model_name``, ``backend``, ``model_path``, ``revision`` (as
-            configured, ``None`` if unset), ``dtype``, ``max_model_len``,
-            ``gpu_memory_utilization``, ``max_num_seqs``,
+            configured, ``None`` if unset), ``resolved_revision`` (the commit
+            hash actually loaded, ``None`` for a plain local folder; R4),
+            ``system_prompt`` (the fixed :data:`SYSTEM_PROMPT`; R6),
+            ``dtype``, ``max_model_len``, ``gpu_memory_utilization``, ``max_num_seqs``,
             ``enable_prefix_caching``, ``enforce_eager``,
             ``limit_mm_per_prompt`` and ``vllm_version``, ``torch_version``,
             ``transformers_version`` (``None`` when unknown). The settings are
@@ -364,6 +366,7 @@ class JoyCaptionVLLMModel(CaptionModel):
             "model_path": settings.get("model_path"),
             "revision": settings.get("revision"),
             "resolved_revision": self._resolved_revision,
+            "system_prompt": SYSTEM_PROMPT,
             "dtype": settings.get("dtype"),
             "max_model_len": settings.get("max_model_len"),
             "gpu_memory_utilization": settings.get("gpu_memory_utilization"),

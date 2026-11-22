@@ -1042,6 +1042,7 @@ DESCRIBE_KEYS = {
     "model_path",
     "revision",
     "resolved_revision",
+    "system_prompt",
     "dtype",
     "quantization",
     "device_map",
@@ -1106,7 +1107,8 @@ class TestDescribe:
         info = JoyCaptionHFModel().describe()
         assert set(info) == DESCRIBE_KEYS
         assert info["model_name"] == "joycaption-beta-one" and info["backend"] == "hf"
-        assert all(info[k] is None for k in DESCRIBE_KEYS - {"model_name", "backend"})
+        assert info["system_prompt"] == SYSTEM_PROMPT  # a constant, known before load (R6)
+        assert all(info[k] is None for k in DESCRIBE_KEYS - {"model_name", "backend", "system_prompt"})
 
     def test_after_load(self, make, monkeypatch) -> None:
         monkeypatch.setattr(joycaption_hf, "_dist_version", lambda name: {"bitsandbytes": "0.49.2"}.get(name))
@@ -1121,6 +1123,7 @@ class TestDescribe:
             "model_path": "./Models",
             "revision": "deadbeef",
             "resolved_revision": None,  # plain folder, fake config has no _commit_hash
+            "system_prompt": "You are a helpful image captioner.",  # R6
             "dtype": "float16",
             "quantization": "nf4",
             "device_map": 0,

@@ -981,6 +981,7 @@ DESCRIBE_KEYS = {
     "model_path",
     "revision",
     "resolved_revision",
+    "system_prompt",
     "dtype",
     "max_model_len",
     "gpu_memory_utilization",
@@ -1000,7 +1001,9 @@ class TestDescribe:
         info = JoyCaptionVLLMModel().describe()
         assert set(info) == DESCRIBE_KEYS
         assert info["model_name"] == "joycaption-beta-one" and info["backend"] == "vllm"
-        for key in DESCRIBE_KEYS - {"model_name", "backend", "vllm_version", "torch_version", "transformers_version"}:
+        assert info["system_prompt"] == SYSTEM_PROMPT  # a constant, known before load (R6)
+        for key in DESCRIBE_KEYS - {"model_name", "backend", "system_prompt", "vllm_version", "torch_version",
+                                    "transformers_version"}:
             assert info[key] is None, key
 
     def test_after_load(self, make) -> None:
@@ -1017,6 +1020,7 @@ class TestDescribe:
         assert info["enable_prefix_caching"] is True
         assert info["enforce_eager"] is False
         assert info["limit_mm_per_prompt"] == {"image": 1}
+        assert info["system_prompt"] == SYSTEM_PROMPT == "You are a helpful image captioner."  # R6
         assert info["vllm_version"] == "0.33.0+fake"
         assert info["torch_version"] == "2.12.0+fake"
 
