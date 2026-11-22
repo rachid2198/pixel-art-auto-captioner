@@ -95,7 +95,9 @@ Local smoke test (images in `./input`, weights in `./Models`):
 - Logs go to stderr (and to `runtime.log_file` if set).
 
 Exit codes: `0` completed (also an empty plan and every dry run) · `1` config error or model-load / run error ·
-`2` interrupted (Ctrl-C / SIGTERM, after flushing) · `3` completed but zero captions succeeded while some were planned.
+`2` interrupted (Ctrl-C / SIGTERM, after flushing) · `3` systemic problem: captions reached the model but none
+succeeded, or every planned image failed to load and more than `runtime.load_failure_alarm` (default 50) were planned.
+Images that fail to load are recorded in `failures/` and retried on the next run, but on their own never cause exit 3.
 
 ### Outputs and resume
 

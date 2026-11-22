@@ -113,6 +113,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "log_level": "INFO",
         "log_file": None,
         "gpu_hourly_cost": None,
+        "load_failure_alarm": 50,
     },
 }
 
@@ -399,7 +400,7 @@ def _validate_output(cfg: dict[str, Any], errors: list[str]) -> None:
 
 
 def _validate_runtime(cfg: dict[str, Any], errors: list[str]) -> None:
-    """``shard``, ``batch_size``, ``log_every_s``, ``num_workers``, ``max_images``."""
+    """``shard``, ``batch_size``, ``log_every_s``, ``num_workers``, ``max_images``, ``load_failure_alarm``."""
     section = _section(cfg, "runtime", errors)
     if section is None:
         return
@@ -414,6 +415,7 @@ def _validate_runtime(cfg: dict[str, Any], errors: list[str]) -> None:
     max_images = section.get("max_images")
     if max_images is not None and not (_is_int(max_images) and max_images > 0):
         errors.append(f"runtime.max_images: must be null or a positive integer, got {max_images!r}")
+    _check_positive_int(section.get("load_failure_alarm"), "runtime.load_failure_alarm", errors)
 
 
 def validate_config(cfg: dict) -> None:
@@ -432,7 +434,8 @@ def validate_config(cfg: dict) -> None:
       does not exist, that is reported too.
     - ``runtime.shard`` parses as ``i/N`` with ``0 <= i < N``.
     - Positive ints: ``runtime.batch_size``, every caption type's
-      ``max_new_tokens``, ``output.fsync_every``, ``runtime.log_every_s``;
+      ``max_new_tokens``, ``output.fsync_every``, ``runtime.log_every_s``,
+      ``runtime.load_failure_alarm`` (R2);
       ``runtime.num_workers >= 0``; ``runtime.max_images`` is null or > 0.
     - Every caption type: ``0 < top_p <= 1`` and ``temperature >= 0`` (``null``
       is allowed for both and means "backend default", SPEC §3).

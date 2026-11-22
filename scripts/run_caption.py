@@ -22,8 +22,10 @@ Exit codes (SPEC §10.1, §12):
   CUDA OOM, write error);
 - ``2`` interrupted (Ctrl-C or SIGTERM; the runner flushed, unloaded and
   wrote the manifest first);
-- ``3`` completed, but zero captions succeeded while more than zero were
-  planned (systemic problem).
+- ``3`` completed, but a systemic problem (R2): captions were sent to the
+  model and none succeeded, or every planned image failed to load and more
+  than ``runtime.load_failure_alarm`` images were planned. Captions lost to
+  image load failures alone do not cause exit 3.
 
 Logging goes to stderr (and ``runtime.log_file`` if set) with the SPEC §12
 format; stdout carries only the ``--dry_run`` JSON plan.
@@ -121,7 +123,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="run_caption.py",
         description="Caption one shard of a pixel-art image dataset with JoyCaption.",
         epilog="Exit codes: 0 completed; 1 config or model-load error; 2 interrupted; "
-        "3 completed but zero captions succeeded while > 0 were planned.",
+        "3 systemic problem (captions reached the model but none succeeded, or every "
+        "planned image failed to load and more than runtime.load_failure_alarm were planned).",
     )
     parser.add_argument("--config", type=Path, default=None, metavar="CONFIG",
                         help="JSON config file (defaults < file < flags)")
@@ -343,19 +346,31 @@ def plan_report(cfg: dict[str, Any], loader: ImageDataLoader, plan: Plan) -> dic
 # ---------------------------------------------------------------------------
 
 
-def exit_code_for(summary: dict[str, Any]) -> int:
-    """Exit code of a run that returned normally (SPEC §10.1).
+def exit_code_for(summary: dict[str, Any], load_failure_alarm: int = 50) -> int:
+    """Exit code of a run that returned normally (SPEC §10.1, R2).
+
+    Captions lost to image load failures (``captions_load_failed``) never
+    reached the model, so they do not count towards a systemic failure.
 
     Args:
         summary: The runner's summary (SPEC §7.3).
+        load_failure_alarm: ``runtime.load_failure_alarm``; when every planned
+            image failed to load and more than this many were planned, the run
+            is systemic too (e.g. a broken mount).
 
     Returns:
-        :data:`EXIT_NO_SUCCESS` if captions were planned but none ended
-        ``ok`` or ``flagged``; otherwise :data:`EXIT_OK`.
+        :data:`EXIT_NO_SUCCESS` if captions were sent to the model and none
+        ended ``ok`` or ``flagged``, or if every planned image failed to load
+        and ``images_planned > load_failure_alarm``; otherwise :data:`EXIT_OK`.
     """
-    planned = summary.get("captions_planned", 0)
+    sent = summary.get("captions_planned", 0) - summary.get("captions_load_failed", 0)
     succeeded = summary.get("captions_ok", 0) + summary.get("captions_flagged", 0)
-    return EXIT_NO_SUCCESS if planned > 0 and succeeded == 0 else EXIT_OK
+    if sent > 0 and succeeded == 0:
+        return EXIT_NO_SUCCESS
+    images_planned = summary.get("images_planned", 0)
+    if images_planned > load_failure_alarm and summary.get("images_load_failed", 0) >= images_planned:
+        return EXIT_NO_SUCCESS
+    return EXIT_OK
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -439,12 +454,18 @@ def _main(args: argparse.Namespace) -> int:
         return EXIT_ERROR
 
     logger.info("Summary: %s", json.dumps(summary))
-    code = exit_code_for(summary)
+    code = exit_code_for(summary, runtime["load_failure_alarm"])
     if code == EXIT_NO_SUCCESS:
-        logger.error(
-            "%d captions planned but none succeeded (systemic problem); exit code %d",
-            summary.get("captions_planned", 0), code,
-        )
+        if summary.get("images_load_failed", 0) >= summary.get("images_planned", 0) > 0:
+            logger.error(
+                "All %d planned images failed to load (systemic problem, e.g. a broken mount); "
+                "exit code %d", summary.get("images_planned", 0), code,
+            )
+        else:
+            logger.error(
+                "%d captions sent to the model but none succeeded (systemic problem); exit code %d",
+                summary.get("captions_planned", 0) - summary.get("captions_load_failed", 0), code,
+            )
     return code
 
 

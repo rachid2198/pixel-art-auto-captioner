@@ -64,7 +64,7 @@ SPEC_9_2_JSON = """
                "qa_sample": 100 },
   "runtime": { "shard": "0/1", "batch_size": 64, "num_workers": 4, "prefetch": 64,
                "max_images": null, "seed": 0, "log_every_s": 30, "log_level": "INFO",
-               "log_file": null, "gpu_hourly_cost": null }
+               "log_file": null, "gpu_hourly_cost": null, "load_failure_alarm": 50 }
 }
 """
 
@@ -507,6 +507,7 @@ _POSITIVE_INT_KEYS = [
     (("runtime", "batch_size"), "runtime.batch_size"),
     (("output", "fsync_every"), "output.fsync_every"),
     (("runtime", "log_every_s"), "runtime.log_every_s"),
+    (("runtime", "load_failure_alarm"), "runtime.load_failure_alarm"),
     (("generation", "caption_types", "long", "max_new_tokens"), "generation.caption_types.long.max_new_tokens"),
     (("generation", "caption_types", "tags", "max_new_tokens"), "generation.caption_types.tags.max_new_tokens"),
 ]
@@ -639,7 +640,8 @@ def test_section_not_object_reported(valid_cfg, section):
 def test_empty_section_still_checked(valid_cfg):
     valid_cfg["runtime"] = {}
     message = _errors(valid_cfg)
-    for key in ["runtime.shard", "runtime.batch_size", "runtime.log_every_s", "runtime.num_workers"]:
+    for key in ["runtime.shard", "runtime.batch_size", "runtime.log_every_s", "runtime.num_workers",
+                "runtime.load_failure_alarm"]:
         assert key in message, key
     assert "runtime.max_images" not in message  # absent == null, which is allowed
 

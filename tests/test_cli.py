@@ -599,10 +599,30 @@ class TestExitCodes:
             ({"captions_planned": 4, "captions_ok": 1, "captions_flagged": 0}, 0),
             ({"captions_planned": 4, "captions_ok": 0, "captions_flagged": 0}, 3),
             ({"captions_planned": 1, "captions_ok": 0, "captions_flagged": 0}, 3),
+            # R2: captions lost to image load failures never reached the model.
+            ({"images_planned": 1, "images_load_failed": 1, "captions_planned": 2,
+              "captions_load_failed": 2, "captions_ok": 0, "captions_flagged": 0}, 0),
+            ({"images_planned": 3, "images_load_failed": 1, "captions_planned": 6,
+              "captions_load_failed": 2, "captions_ok": 0, "captions_flagged": 0}, 3),
+            ({"images_planned": 3, "images_load_failed": 1, "captions_planned": 6,
+              "captions_load_failed": 2, "captions_ok": 4, "captions_flagged": 0}, 0),
+            # R2 alarm: every planned image failed to load and more than 50 were planned.
+            ({"images_planned": 51, "images_load_failed": 51, "captions_planned": 102,
+              "captions_load_failed": 102, "captions_ok": 0, "captions_flagged": 0}, 3),
+            ({"images_planned": 50, "images_load_failed": 50, "captions_planned": 100,
+              "captions_load_failed": 100, "captions_ok": 0, "captions_flagged": 0}, 0),
+            ({"images_planned": 51, "images_load_failed": 50, "captions_planned": 102,
+              "captions_load_failed": 100, "captions_ok": 2, "captions_flagged": 0}, 0),
         ],
     )
     def test_exit_code_for(self, summary, code) -> None:
         assert cli.exit_code_for(summary) == code
+
+    @pytest.mark.parametrize(("alarm", "code"), [(4, 3), (5, 0), (10, 0)])
+    def test_exit_code_for_uses_the_alarm_threshold(self, alarm, code) -> None:
+        summary = {"images_planned": 5, "images_load_failed": 5, "captions_planned": 5,
+                   "captions_load_failed": 5, "captions_ok": 0, "captions_flagged": 0}
+        assert cli.exit_code_for(summary, alarm) == code
 
     def test_success_0(self, capsys, config_file, factory, out_dir) -> None:
         code, out, err = run_cli(capsys, "--config", str(config_file))
@@ -641,12 +661,53 @@ class TestExitCodes:
         assert code == 3
         assert "none succeeded" in err
 
-    def test_all_images_undecodable_3(self, capsys, tmp_path, config_file, factory,
-                                      dataset) -> None:
+    def test_few_undecodable_images_0(self, capsys, config_file, factory, dataset) -> None:
+        # R2: 5 planned images all fail to load, 5 <= load_failure_alarm (50).
         for rel in IMAGES:
             (dataset / rel).write_bytes(b"not an image")
-        code, _, _ = run_cli(capsys, "--config", str(config_file))
-        assert code == 3
+        code, _, err = run_cli(capsys, "--config", str(config_file))
+        assert code == 0, err
+        assert factory.model.batches == 0
+
+    def test_corrupt_image_left_on_resume_0(self, capsys, config_file, factory, dataset) -> None:
+        # R2: the good images are done; a resume plans only the corrupt one.
+        (dataset / "broken" / "000001.png").parent.mkdir(parents=True)
+        (dataset / "broken" / "000001.png").write_bytes(b"not an image")
+        assert run_cli(capsys, "--config", str(config_file))[0] == 0
+        factory.model.batches = 0
+        code, _, err = run_cli(capsys, "--config", str(config_file))
+        assert code == 0, err
+        assert factory.model.batches == 0
+        assert '"images_planned": 1' in err and '"captions_load_failed": 2' in err
+
+    @pytest.mark.parametrize(("n_images", "code"), [(51, 3), (50, 0)])
+    def test_all_images_undecodable_alarm(self, capsys, tmp_path, out_dir, factory,
+                                          n_images, code) -> None:
+        # R2 guard (e.g. a broken mount): exit 3 only above runtime.load_failure_alarm.
+        data = tmp_path / "corrupt"
+        (data / "src").mkdir(parents=True)
+        for i in range(n_images):
+            (data / "src" / f"{i:06d}.png").write_bytes(b"not an image")
+        cfg = {
+            "input": {"input_dir": str(data)},
+            "model": {"backend": "hf"},
+            "prompts": {"sources_file": None, "sources": {}},
+            "output": {"output_dir": str(out_dir), "qa_sample": 0},
+            "runtime": {"num_workers": 0, "batch_size": 8, "log_every_s": 3600},
+        }
+        got, _, err = run_cli(capsys, "--config", str(write_config(tmp_path / "c.json", cfg)))
+        assert got == code, err
+        if code == 3:
+            assert f"All {n_images} planned images failed to load" in err
+
+    def test_load_failure_alarm_from_config(self, capsys, tmp_path, config_file, factory,
+                                            dataset) -> None:
+        for rel in IMAGES:
+            (dataset / rel).write_bytes(b"not an image")
+        cfg = json.loads(config_file.read_text(encoding="utf-8"))
+        cfg["runtime"]["load_failure_alarm"] = 4
+        code, _, err = run_cli(capsys, "--config", str(write_config(config_file, cfg)))
+        assert code == 3, err
 
     @pytest.mark.parametrize(
         "error",

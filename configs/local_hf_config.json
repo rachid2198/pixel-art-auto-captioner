@@ -28,6 +28,7 @@
     "log_every_s": 10,
     "log_level": "INFO",
     "log_file": null,
-    "gpu_hourly_cost": null
+    "gpu_hourly_cost": null,
+    "load_failure_alarm": 50
   }
 }

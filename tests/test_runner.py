@@ -227,6 +227,8 @@ def assert_invariants(summary: dict) -> None:
         assert summary["captions_planned"] == (
             summary["captions_ok"] + summary["captions_flagged"] + summary["captions_failed"]
         )
+    assert summary["captions_load_failed"] <= summary["captions_failed"]
+    assert (summary["captions_load_failed"] == 0) == (summary["images_load_failed"] == 0)
 
 
 def prompt_config(cfg: dict) -> dict:
@@ -690,6 +692,7 @@ class TestBatchFallback:
         runner, _ = make_runner(cfg, Empty())
         summary = runner.run()
         assert summary["captions_failed"] == 10
+        assert summary["captions_load_failed"] == 0  # model errors are not load failures (R2)
         record = read_jsonl(captions_path(cfg))[0]
         assert record["extra"]["error"].startswith("RuntimeError")
 
@@ -1020,6 +1023,7 @@ class TestLoadFailure:
         assert summary["images_load_failed"] == 1
         assert summary["captions_planned"] == 12
         assert summary["captions_ok"] == 10 and summary["captions_failed"] == 2
+        assert summary["captions_load_failed"] == 2
         assert_invariants(summary)
         assert self.BROKEN not in {r.image_rel_path.as_posix() for r in model.requests}
         assert self.BROKEN not in {r["image_rel_path"] for r in read_jsonl(captions_path(broken_cfg))}
@@ -1061,7 +1065,7 @@ class TestLoadFailure:
         failed = read_jsonl(failures_path(cfg2))
         assert [r["caption_type"] for r in failed] == ["long", "short", "tags"]
         assert summary["captions_planned"] == 5 + 3
-        assert summary["captions_failed"] == 3
+        assert summary["captions_failed"] == summary["captions_load_failed"] == 3
         assert_invariants(summary)
 
 
@@ -1339,7 +1343,8 @@ class TestPackage:
         assert SUMMARY_KEYS == (
             "run_id", "shard", "images_discovered", "images_in_shard",
             "images_already_complete", "images_deferred", "images_planned",
-            "images_load_failed", "captions_planned", "captions_ok", "captions_flagged",
+            "images_load_failed", "captions_planned", "captions_load_failed", "captions_ok",
+            "captions_flagged",
             "captions_failed", "retries", "interrupted", "output_dir",
         )
 

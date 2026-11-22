@@ -110,6 +110,7 @@ SUMMARY_KEYS: tuple[str, ...] = (
     "images_planned",
     "images_load_failed",
     "captions_planned",
+    "captions_load_failed",
     "captions_ok",
     "captions_flagged",
     "captions_failed",
@@ -147,6 +148,7 @@ class _Counts:
 
     images_done: int = 0
     images_load_failed: int = 0
+    captions_load_failed: int = 0
     captions_ok: int = 0
     captions_flagged: int = 0
     captions_failed: int = 0
@@ -568,6 +570,7 @@ class CaptionRunner:
                 logger.critical("Write error in %s: %s", self._failures.path.as_posix(), exc)
                 raise
         self._counts.images_load_failed += 1
+        self._counts.captions_load_failed += len(pending)
         self._counts.captions_failed += len(pending)
         self._counts.images_done += 1
 
@@ -744,6 +747,7 @@ class CaptionRunner:
             "images_planned": plan.images_planned if plan else 0,
             "images_load_failed": counts.images_load_failed,
             "captions_planned": plan.captions_planned if plan else 0,
+            "captions_load_failed": counts.captions_load_failed,
             "captions_ok": counts.captions_ok,
             "captions_flagged": counts.captions_flagged,
             "captions_failed": counts.captions_failed,
