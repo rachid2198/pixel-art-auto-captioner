@@ -5,7 +5,10 @@
   },
   "aground": {
     "category": "game_crop",
-    "name": "Aground"
+    "name": "Aground",
+    "genre": "2D survival, crafting and building",
+    "perspective": "side-view",
+    "art_style": "simple low-resolution pixel art"
   },
   "apotheon": {
     "category": "game_crop",
@@ -17,15 +20,24 @@
   },
   "astro-aqua-kitty": {
     "category": "game_crop",
-    "name": "Astro Aqua Kitty"
+    "name": "Astro Aqua Kitty",
+    "genre": "shoot-'em-up action RPG",
+    "perspective": "side-view",
+    "art_style": "retro arcade-style pixel art"
   },
   "axiom-verge": {
     "category": "game_crop",
-    "name": "Axiom Verge"
+    "name": "Axiom Verge",
+    "genre": "metroidvania action-adventure",
+    "perspective": "side-view",
+    "art_style": "NES-inspired retro sci-fi pixel art"
   },
   "axiom-verge 2": {
     "category": "game_crop",
-    "name": "Axiom Verge 2"
+    "name": "Axiom Verge 2",
+    "genre": "metroidvania action-adventure",
+    "perspective": "side-view",
+    "art_style": "16-bit-inspired retro pixel art"
   },
   "barotrauma": {
     "category": "game_crop",
@@ -33,19 +45,30 @@
   },
   "black-skylands": {
     "category": "game_crop",
-    "name": "Black Skylands"
+    "name": "Black Skylands",
+    "genre": "open-world sky-pirate action adventure",
+    "perspective": "top-down",
+    "art_style": "detailed modern pixel art"
   },
   "blaster-master-zero": {
     "category": "game_crop",
-    "name": "Blaster Master Zero"
+    "name": "Blaster Master Zero",
+    "genre": "action platformer with top-down dungeon sections",
+    "art_style": "NES-inspired retro pixel art"
   },
   "broforce": {
     "category": "game_crop",
-    "name": "Broforce"
+    "name": "Broforce",
+    "genre": "run-and-gun action platformer",
+    "perspective": "side-view",
+    "art_style": "chunky retro pixel art with destructible terrain"
   },
   "carrion": {
     "category": "game_crop",
-    "name": "Carrion"
+    "name": "Carrion",
+    "genre": "reverse-horror metroidvania",
+    "perspective": "side-view",
+    "art_style": "detailed dark pixel art"
   },
   "cavalry-girls": {
     "category": "game_crop",
@@ -53,19 +76,31 @@
   },
   "cave-story": {
     "category": "game_crop",
-    "name": "Cave Story"
+    "name": "Cave Story",
+    "genre": "metroidvania action platformer",
+    "perspective": "side-view",
+    "art_style": "low-resolution retro pixel art"
   },
   "celeste": {
     "category": "game_crop",
-    "name": "Celeste"
+    "name": "Celeste",
+    "genre": "precision platformer",
+    "perspective": "side-view",
+    "art_style": "low-resolution pixel art with vibrant colours"
   },
   "chasm": {
     "category": "game_crop",
-    "name": "Chasm"
+    "name": "Chasm",
+    "genre": "metroidvania action RPG",
+    "perspective": "side-view",
+    "art_style": "16-bit-style retro pixel art"
   },
   "core-keeper": {
     "category": "game_crop",
-    "name": "Core Keeper"
+    "name": "Core Keeper",
+    "genre": "underground survival crafting sandbox",
+    "perspective": "top-down",
+    "art_style": "modern pixel art with dynamic lighting"
   },
   "craft-the-world": {
     "category": "game_crop",
@@ -73,15 +108,23 @@
   },
   "crosscode": {
     "category": "game_crop",
-    "name": "CrossCode"
+    "name": "CrossCode",
+    "genre": "action RPG",
+    "perspective": "three-quarter top-down",
+    "art_style": "16-bit SNES-inspired pixel art"
   },
   "crying-suns": {
     "category": "game_crop",
-    "name": "Crying Suns"
+    "name": "Crying Suns",
+    "genre": "tactical roguelite",
+    "art_style": "detailed sci-fi pixel art"
   },
   "crypt-necrodancer": {
     "category": "game_crop",
-    "name": "Crypt of the NecroDancer"
+    "name": "Crypt of the NecroDancer",
+    "genre": "rhythm roguelike dungeon crawler",
+    "perspective": "top-down",
+    "art_style": "colourful retro pixel art"
   },
   "cult-of-the-lamb": {
     "category": "game_crop",
@@ -97,7 +140,10 @@
   },
   "dead-cells": {
     "category": "game_crop",
-    "name": "Dead Cells"
+    "name": "Dead Cells",
+    "genre": "roguelite metroidvania action",
+    "perspective": "side-view",
+    "art_style": "detailed modern pixel art with dynamic lighting"
   },
   "dig-deep-in-galaxies": {
     "category": "game_crop",
@@ -109,7 +155,10 @@
   },
   "downwell": {
     "category": "game_crop",
-    "name": "Downwell"
+    "name": "Downwell",
+    "genre": "vertical roguelike shooter platformer",
+    "perspective": "side-view",
+    "art_style": "minimalist pixel art with a three-colour palette"
   },
   "dustforce": {
     "category": "game_crop",
@@ -125,11 +174,16 @@
   },
   "epic-astro-story": {
     "category": "game_crop",
-    "name": "Epic Astro Story"
+    "name": "Epic Astro Story",
+    "genre": "space colony management simulation",
+    "art_style": "cute mobile-style pixel art"
   },
   "fabular-once-upon-a-spacetime": {
     "category": "game_crop",
-    "name": "Fabular: Once upon a Spacetime"
+    "name": "Fabular: Once upon a Spacetime",
+    "genre": "space action RPG",
+    "perspective": "top-down",
+    "art_style": "modern pixel art"
   },
   "factorio": {
     "category": "game_crop",
@@ -145,23 +199,38 @@
   },
   "fez": {
     "category": "game_crop",
-    "name": "Fez"
+    "name": "Fez",
+    "genre": "puzzle platformer",
+    "perspective": "side-view",
+    "art_style": "colourful pixel art"
   },
   "forager": {
     "category": "game_crop",
-    "name": "Forager"
+    "name": "Forager",
+    "genre": "exploration and crafting adventure",
+    "perspective": "top-down",
+    "art_style": "bright, chunky pixel art"
   },
   "ghost-1.0": {
     "category": "game_crop",
-    "name": "Ghost 1.0"
+    "name": "Ghost 1.0",
+    "genre": "metroidvania action",
+    "perspective": "side-view",
+    "art_style": "modern sci-fi pixel art"
   },
   "gnorp-apologue": {
     "category": "game_crop",
-    "name": "The Gnorp Apologue"
+    "name": "The Gnorp Apologue",
+    "genre": "incremental idle",
+    "perspective": "side-view",
+    "art_style": "minimalist pixel art"
   },
   "graveyard-keeper": {
     "category": "game_crop",
-    "name": "Graveyard Keeper"
+    "name": "Graveyard Keeper",
+    "genre": "management and crafting simulation",
+    "perspective": "three-quarter top-down",
+    "art_style": "detailed modern pixel art with dynamic lighting"
   },
   "grim-nights": {
     "category": "game_crop",
@@ -173,7 +242,10 @@
   },
   "halcyon-6": {
     "category": "game_crop",
-    "name": "Halcyon 6: Starbase Commander"
+    "name": "Halcyon 6: Starbase Commander",
+    "genre": "starbase management and tactical RPG",
+    "perspective": "side-view",
+    "art_style": "16-bit-style sci-fi pixel art"
   },
   "hardcore-mecha": {
     "category": "game_crop",
@@ -193,11 +265,17 @@
   },
   "hotline-miami": {
     "category": "game_crop",
-    "name": "Hotline Miami"
+    "name": "Hotline Miami",
+    "genre": "top-down shooter",
+    "perspective": "top-down",
+    "art_style": "neon, high-contrast low-resolution pixel art"
   },
   "iconoclasts": {
     "category": "game_crop",
-    "name": "Iconoclasts"
+    "name": "Iconoclasts",
+    "genre": "action-adventure platformer",
+    "perspective": "side-view",
+    "art_style": "detailed, colourful 16-bit-style pixel art"
   },
   "industries-of-titan": {
     "category": "game_crop",
@@ -205,27 +283,45 @@
   },
   "inmost": {
     "category": "game_crop",
-    "name": "Inmost"
+    "name": "Inmost",
+    "genre": "puzzle platformer adventure",
+    "perspective": "side-view",
+    "art_style": "dark, atmospheric pixel art with dynamic lighting"
   },
   "kandria": {
     "category": "game_crop",
-    "name": "Kandria"
+    "name": "Kandria",
+    "genre": "open-world action platformer RPG",
+    "perspective": "side-view",
+    "art_style": "modern pixel art"
   },
   "katanna-zero": {
     "category": "game_crop",
-    "name": "Katana ZERO"
+    "name": "Katana ZERO",
+    "genre": "action platformer",
+    "perspective": "side-view",
+    "art_style": "neo-noir pixel art with neon lighting"
   },
   "keplerth": {
     "category": "game_crop",
-    "name": "Keplerth"
+    "name": "Keplerth",
+    "genre": "open-world survival crafting",
+    "perspective": "top-down",
+    "art_style": "modern pixel art"
   },
   "kero-blaster": {
     "category": "game_crop",
-    "name": "Kero Blaster"
+    "name": "Kero Blaster",
+    "genre": "run-and-gun platformer",
+    "perspective": "side-view",
+    "art_style": "simple low-resolution retro pixel art"
   },
   "king-arthurs-gold": {
     "category": "game_crop",
-    "name": "King Arthur's Gold"
+    "name": "King Arthur's Gold",
+    "genre": "medieval multiplayer sandbox combat",
+    "perspective": "side-view",
+    "art_style": "simple retro pixel art"
   },
   "last-command": {
     "category": "game_crop",
@@ -245,7 +341,10 @@
   },
   "metal-slug": {
     "category": "game_crop",
-    "name": "Metal Slug"
+    "name": "Metal Slug",
+    "genre": "run-and-gun shoot-'em-up",
+    "perspective": "side-view",
+    "art_style": "highly detailed arcade pixel art"
   },
   "metro-last-light": {
     "category": "game_crop",
@@ -253,7 +352,10 @@
   },
   "metroid-fusion-dataset": {
     "category": "game_crop",
-    "name": "Metroid Fusion"
+    "name": "Metroid Fusion",
+    "genre": "metroidvania action-adventure",
+    "perspective": "side-view",
+    "art_style": "Game Boy Advance pixel art"
   },
   "midjourney-dataset": {
     "category": "ai_pixel_art",
@@ -261,7 +363,10 @@
   },
   "mindustry": {
     "category": "game_crop",
-    "name": "Mindustry"
+    "name": "Mindustry",
+    "genre": "factory-building tower defense",
+    "perspective": "top-down",
+    "art_style": "simple, clean pixel art"
   },
   "mistward": {
     "category": "game_crop",
@@ -269,7 +374,10 @@
   },
   "momodora-reverie-under-the-moonlight": {
     "category": "game_crop",
-    "name": "Momodora: Reverie Under the Moonlight"
+    "name": "Momodora: Reverie Under the Moonlight",
+    "genre": "metroidvania action platformer",
+    "perspective": "side-view",
+    "art_style": "detailed pixel art with a muted palette"
   },
   "nine-sols": {
     "category": "game_crop",
@@ -285,7 +393,10 @@
   },
   "phoenotopia-awakening": {
     "category": "game_crop",
-    "name": "Phoenotopia: Awakening"
+    "name": "Phoenotopia: Awakening",
+    "genre": "action-adventure platformer",
+    "perspective": "side-view",
+    "art_style": "colourful 16-bit-style pixel art"
   },
   "pinterest-dataset-game": {
     "category": "mixed_collection",
@@ -309,15 +420,22 @@
   },
   "rain-world": {
     "category": "game_crop",
-    "name": "Rain World"
+    "name": "Rain World",
+    "genre": "survival platformer",
+    "perspective": "side-view",
+    "art_style": "atmospheric pixel art of industrial ruins"
   },
   "rebel-transmute": {
     "category": "game_crop",
-    "name": "Rebel Transmute"
+    "name": "Rebel Transmute",
+    "genre": "metroidvania action platformer",
+    "perspective": "side-view"
   },
   "regions-of-ruin": {
     "category": "game_crop",
-    "name": "Regions of Ruin"
+    "name": "Regions of Ruin",
+    "genre": "action RPG with town building",
+    "perspective": "side-view"
   },
   "rimworld": {
     "category": "game_crop",
@@ -325,15 +443,23 @@
   },
   "rogue-legacy": {
     "category": "game_crop",
-    "name": "Rogue Legacy"
+    "name": "Rogue Legacy",
+    "genre": "roguelite action platformer",
+    "perspective": "side-view",
+    "art_style": "colourful 16-bit-style pixel art"
   },
   "rusted-moss": {
     "category": "game_crop",
-    "name": "Rusted Moss"
+    "name": "Rusted Moss",
+    "genre": "metroidvania shooter with grappling",
+    "perspective": "side-view"
   },
   "sea-start": {
     "category": "game_crop",
-    "name": "Sea of Stars"
+    "name": "Sea of Stars",
+    "genre": "turn-based RPG",
+    "perspective": "three-quarter top-down",
+    "art_style": "detailed modern pixel art with dynamic lighting"
   },
   "space-rangers-hd-a-war-apart": {
     "category": "game_crop",
@@ -341,15 +467,23 @@
   },
   "star-renegades": {
     "category": "game_crop",
-    "name": "Star Renegades"
+    "name": "Star Renegades",
+    "genre": "roguelite tactical RPG",
+    "art_style": "detailed pixel art with dynamic lighting"
   },
   "starbound": {
     "category": "game_crop",
-    "name": "Starbound"
+    "name": "Starbound",
+    "genre": "2D sandbox survival and exploration",
+    "perspective": "side-view",
+    "art_style": "colourful pixel art"
   },
   "stardew-valley": {
     "category": "game_crop",
-    "name": "Stardew Valley"
+    "name": "Stardew Valley",
+    "genre": "farming simulation RPG",
+    "perspective": "three-quarter top-down",
+    "art_style": "colourful 16-bit-style pixel art"
   },
   "steamworld-dig": {
     "category": "game_crop",
@@ -357,7 +491,10 @@
   },
   "super-metroid-redesign-dataset": {
     "category": "game_crop",
-    "name": "Super Metroid Redesign"
+    "name": "Super Metroid Redesign",
+    "genre": "metroidvania action-adventure",
+    "perspective": "side-view",
+    "art_style": "16-bit SNES-style pixel art"
   },
   "synthetik-legion-rising": {
     "category": "game_crop",
@@ -369,11 +506,17 @@
   },
   "terraria": {
     "category": "game_crop",
-    "name": "Terraria"
+    "name": "Terraria",
+    "genre": "2D sandbox survival and crafting",
+    "perspective": "side-view",
+    "art_style": "colourful 16-bit-style pixel art"
   },
   "tevi": {
     "category": "game_crop",
-    "name": "TEVI"
+    "name": "TEVI",
+    "genre": "metroidvania action RPG",
+    "perspective": "side-view",
+    "art_style": "anime-style pixel art"
   },
   "the-last-federation": {
     "category": "game_crop",
@@ -381,11 +524,16 @@
   },
   "the-library-of-babel": {
     "category": "game_crop",
-    "name": "The Library of Babel"
+    "name": "The Library of Babel",
+    "genre": "stealth adventure platformer",
+    "perspective": "side-view"
   },
   "the-messenger": {
     "category": "game_crop",
-    "name": "The Messenger"
+    "name": "The Messenger",
+    "genre": "action platformer",
+    "perspective": "side-view",
+    "art_style": "8-bit and 16-bit retro pixel art"
   },
   "the-vagrant": {
     "category": "game_crop",
@@ -393,7 +541,10 @@
   },
   "towerfall": {
     "category": "game_crop",
-    "name": "TowerFall"
+    "name": "TowerFall",
+    "genre": "arena archery action",
+    "perspective": "side-view",
+    "art_style": "low-resolution retro pixel art"
   },
   "trappist": {
     "category": "game_crop",
@@ -401,7 +552,9 @@
   },
   "turbo-kid": {
     "category": "game_crop",
-    "name": "Turbo Kid"
+    "name": "Turbo Kid",
+    "genre": "metroidvania action platformer",
+    "perspective": "side-view"
   },
   "turing-complete": {
     "category": "game_crop",
@@ -413,15 +566,22 @@
   },
   "until-we-die": {
     "category": "game_crop",
-    "name": "Until We Die"
+    "name": "Until We Die",
+    "genre": "survival base-defense strategy",
+    "perspective": "side-view"
   },
   "wayward": {
     "category": "game_crop",
-    "name": "Wayward"
+    "name": "Wayward",
+    "genre": "wilderness survival roguelike",
+    "perspective": "top-down"
   },
   "webbed": {
     "category": "game_crop",
-    "name": "Webbed"
+    "name": "Webbed",
+    "genre": "physics platformer",
+    "perspective": "side-view",
+    "art_style": "cute, colourful pixel art"
   },
   "within-a-dead-city": {
     "category": "game_crop",

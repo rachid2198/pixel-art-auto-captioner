@@ -82,6 +82,7 @@ from pixel_art_auto_captioner.common.export_utils import (
 from pixel_art_auto_captioner.common.prompts import (
     prompt_config_hash,
     render_prompt,
+    resolve_facts,
     resolve_source,
 )
 from pixel_art_auto_captioner.common.quality import check_caption
@@ -346,6 +347,7 @@ class CaptionRunner:
         self._t_last_log = 0.0
         self._prompt_cache: dict[tuple[str, str], str] = {}
         self._source_cache: dict[str, tuple[str, str]] = {}
+        self._facts_cache: dict[str, dict[str, str]] = {}
         self._sigterm_installed = False
 
     def _run_plan(self, plan: Plan) -> dict[str, Any]:
@@ -597,7 +599,7 @@ class CaptionRunner:
             model_revision=None if revision is None else str(revision),
             backend=str(getattr(self._model, "backend", None) or model_cfg.get("backend", "")),
             run_id=self._run_id, shard=self.shard,
-            extra={"source_name": source_name}, **fields,
+            extra={"source_name": source_name, **self._facts(image.source)}, **fields,
         )
 
     def _write(self, record: CaptionRecord) -> None:
@@ -632,6 +634,12 @@ class CaptionRunner:
     # ------------------------------------------------------------------
     # Prompt helpers
     # ------------------------------------------------------------------
+
+    def _facts(self, source: str) -> dict[str, str]:
+        """Curated fact fields of a source, copied into each record's ``extra`` (R14)."""
+        if source not in self._facts_cache:
+            self._facts_cache[source] = resolve_facts(source, self._prompt_config)
+        return self._facts_cache[source]
 
     def _resolve(self, source: str) -> tuple[str, str]:
         if source not in self._source_cache:

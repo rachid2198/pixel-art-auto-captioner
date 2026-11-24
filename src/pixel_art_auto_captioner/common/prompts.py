@@ -1,4 +1,4 @@
-"""Prompt rendering and source resolution (SPEC v1.1 §5.1).
+"""Prompt rendering and source resolution (SPEC v1.2 §5.1, R14).
 
 A request's user prompt is built from three config parts:
 
@@ -6,9 +6,11 @@ A request's user prompt is built from three config parts:
   top_p, top_k}`` (``generation.caption_types`` in the config file, §9.2);
 - ``categories``: name -> ``context`` template, which may reference
   ``{source_name}``;
-- ``sources``: top-level folder -> ``{category, name}``. Unknown folders use
-  ``default_category``; ``name`` defaults to the folder name with dashes
-  replaced by spaces, title-cased.
+- ``sources``: top-level folder -> ``{category, name}`` plus optional curated
+  fact fields (``genre``, ``perspective``, ``art_style``; R14). Unknown folders
+  use ``default_category``; ``name`` defaults to the folder name with dashes
+  replaced by spaces, title-cased;
+- ``facts``: fact field -> sentence template with the placeholder ``{value}``.
 
 Shape of ``prompt_config``
 --------------------------
@@ -22,7 +24,7 @@ The runner builds it once per run::
 
 Rendering (SPEC §5.1)::
 
-    prompt_config["template"].format(instruction=..., context=..., constraints=...)
+    prompt_config["template"].format(instruction=..., context=..., facts=..., constraints=...)
 
 with all whitespace runs collapsed to one space and the result stripped.
 
@@ -111,6 +113,58 @@ def resolve_source(source: str, prompt_config: dict) -> tuple[str, str]:
     return str(category), str(name)
 
 
+def resolve_facts(source: str, prompt_config: dict) -> dict[str, str]:
+    """Return the curated fact fields set for a source (R14).
+
+    A fact field is any key of ``prompt_config["facts"]`` (e.g. ``genre``,
+    ``perspective``, ``art_style``). The result holds each such field that the
+    source's entry in ``prompt_config["sources"]`` sets to a non-null value, in
+    the key order of ``prompt_config["facts"]``. Unknown sources, entries
+    without fact fields and a missing or ``null`` ``facts`` mapping give ``{}``.
+
+    Args:
+        source: Top-level folder name (``ImageRecord.source``).
+        prompt_config: Prompt config (see the module docstring).
+
+    Returns:
+        Ordered ``{field: value}`` with string values.
+
+    Raises:
+        ValueError: If ``facts`` or ``sources`` is not an object, or if the
+            source entry is not an object.
+    """
+    facts = prompt_config.get("facts") or {}
+    if not isinstance(facts, dict):
+        raise ValueError(f"prompt_config['facts'] must be an object, got {facts!r}")
+    sources = prompt_config.get("sources") or {}
+    if not isinstance(sources, dict):
+        raise ValueError(f"prompt_config['sources'] must be an object, got {sources!r}")
+    entry = sources.get(source)
+    if entry is None:
+        return {}
+    if not isinstance(entry, dict):
+        raise ValueError(f"prompt_config['sources'][{source!r}] must be an object, got {entry!r}")
+    return {field: str(entry[field]) for field in facts if entry.get(field) is not None}
+
+
+def _render_facts(source: str, prompt_config: dict) -> str:
+    """One sentence per fact the source sets, rendered from ``prompts.facts`` and joined by spaces."""
+    templates = prompt_config.get("facts") or {}
+    sentences = []
+    for field, value in resolve_facts(source, prompt_config).items():
+        template = templates[field]
+        if not isinstance(template, str):
+            raise ValueError(f"prompt_config['facts'][{field!r}] must be a string, got {template!r}")
+        try:
+            sentences.append(template.format(value=value))
+        except (KeyError, IndexError, ValueError) as exc:
+            raise ValueError(
+                f"prompt_config['facts'][{field!r}] is not a valid template "
+                f"(only {{value}} is allowed): {type(exc).__name__}: {exc}"
+            ) from exc
+    return " ".join(sentences)
+
+
 def render_prompt(caption_type: str, source: str, prompt_config: dict) -> str:
     """Render the full user prompt for one (caption type, source) pair.
 
@@ -120,10 +174,14 @@ def render_prompt(caption_type: str, source: str, prompt_config: dict) -> str:
     2. ``(category, source_name)`` = :func:`resolve_source`.
     3. ``context`` = ``prompt_config["categories"][category]`` formatted with
        ``source_name=source_name``.
-    4. ``constraints`` = ``prompt_config["constraints"]`` (missing or ``null``
+    4. ``facts`` = one sentence per fact field the source sets
+       (:func:`resolve_facts`), each ``prompt_config["facts"][field]``
+       formatted with ``value=...``, joined by spaces; ``""`` if none (R14).
+    5. ``constraints`` = ``prompt_config["constraints"]`` (missing or ``null``
        means ``""``).
-    5. ``prompt_config["template"].format(instruction=..., context=...,
-       constraints=...)``, whitespace collapsed and stripped.
+    6. ``prompt_config["template"].format(instruction=..., context=...,
+       facts=..., constraints=...)``, whitespace collapsed and stripped. A
+       template without ``{facts}`` is valid and omits them.
 
     The instruction and constraints are inserted verbatim (not formatted), so
     braces in them are kept as-is.
@@ -140,8 +198,9 @@ def render_prompt(caption_type: str, source: str, prompt_config: dict) -> str:
 
     Raises:
         ValueError: If the caption type, its instruction, the category or the
-            template is missing, or if the context or template references a
-            placeholder other than the documented ones (or is malformed).
+            template is missing, or if the context, a fact template or the
+            template references a placeholder other than the documented ones
+            (or is malformed).
     """
     caption_types = prompt_config.get("caption_types")
     if not isinstance(caption_types, dict):
@@ -178,6 +237,7 @@ def render_prompt(caption_type: str, source: str, prompt_config: dict) -> str:
             f"(only {{source_name}} is allowed): {type(exc).__name__}: {exc}"
         ) from exc
 
+    facts = _render_facts(source, prompt_config)
     constraints = prompt_config.get("constraints")
     if constraints is None:
         constraints = ""
@@ -186,12 +246,13 @@ def render_prompt(caption_type: str, source: str, prompt_config: dict) -> str:
         raise ValueError(f"prompt_config['template'] must be a string, got {template!r}")
     try:
         rendered = template.format(
-            instruction=instruction, context=context, constraints=str(constraints)
+            instruction=instruction, context=context, facts=facts, constraints=str(constraints)
         )
     except (KeyError, IndexError, ValueError) as exc:
         raise ValueError(
             "prompt_config['template'] is not a valid template (allowed placeholders: "
-            f"{{instruction}}, {{context}}, {{constraints}}): {type(exc).__name__}: {exc}"
+            f"{{instruction}}, {{context}}, {{facts}}, {{constraints}}): "
+            f"{type(exc).__name__}: {exc}"
         ) from exc
     return _collapse_whitespace(rendered)
 

@@ -1520,3 +1520,27 @@ class TestPackage:
         assert CaptionRunner.__doc__ and CaptionRunner.__init__.__doc__
         assert CaptionRunner.run.__doc__
         assert runner_mod.__doc__ and runner_mod._git_sha.__doc__
+
+
+# ---------------------------------------------------------------------------
+# Curated source facts in prompts and records (R14)
+# ---------------------------------------------------------------------------
+
+
+class TestSourceFacts:
+    def test_facts_reach_prompt_and_extra(self, tmp_path, dataset) -> None:
+        cfg = build_config(tmp_path, dataset, {"prompts": {"sources": {"celeste": {
+            "genre": "precision platformer", "perspective": "side-view"}}}})
+        make_runner(cfg)[0].run()
+        records = read_jsonl(captions_path(cfg))
+        celeste = [r for r in records if r["source"] == "celeste"]
+        hades = [r for r in records if r["source"] == "hades"]
+        assert celeste and hades
+        for record in celeste:
+            assert record["extra"] == {"source_name": "Celeste", "genre": "precision platformer",
+                                       "perspective": "side-view"}
+            assert ("The game's genre is precision platformer. The game's camera perspective is side-view."
+                    in record["prompt"])
+        for record in hades:
+            assert record["extra"] == {"source_name": "Hades"}
+            assert "genre" not in record["prompt"]

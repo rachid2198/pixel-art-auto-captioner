@@ -50,8 +50,13 @@ SPEC_9_2_JSON = """
     }
   },
   "prompts": {
-    "template": "{instruction} {context} {constraints}",
+    "template": "{instruction} {context} {facts} {constraints}",
     "constraints": "Do not mention the image resolution.",
+    "facts": {
+      "genre": "The game's genre is {value}.",
+      "perspective": "The game's camera perspective is {value}.",
+      "art_style": "The game's art style is {value}."
+    },
     "default_category": "mixed_collection",
     "categories": {
       "game_crop":        "This image is a crop from a screenshot of the video game {source_name}.",
@@ -817,3 +822,47 @@ def test_config_import_pulls_in_no_torch_or_vllm():
         [sys.executable, "-c", code], env=env, capture_output=True, text=True, timeout=60,
     )
     assert proc.returncode == 0, proc.stderr
+
+
+# ---------------------------------------------------------------------------
+# Curated source facts (R14)
+# ---------------------------------------------------------------------------
+
+
+class TestFactsValidation:
+    def test_sources_with_fact_fields_pass(self, valid_cfg):
+        valid_cfg["prompts"]["sources"]["celeste"] = {
+            "category": "game_crop", "name": "Celeste", "genre": "precision platformer",
+            "perspective": "side-view", "art_style": None,
+        }
+        assert _errors(valid_cfg) == ""
+
+    def test_unknown_source_field_reported(self, valid_cfg):
+        valid_cfg["prompts"]["sources"]["celeste"] = {"category": "game_crop", "genr": "platformer"}
+        msg = _errors(valid_cfg)
+        assert "prompts.sources.celeste.genr: unknown field" in msg
+        assert "'genre'" in msg
+
+    @pytest.mark.parametrize("value", ["", "   ", 3, ["platformer"]])
+    def test_bad_fact_value_reported(self, valid_cfg, value):
+        valid_cfg["prompts"]["sources"]["celeste"] = {"category": "game_crop", "genre": value}
+        assert "prompts.sources.celeste.genre: must be a non-empty string or null" in _errors(valid_cfg)
+
+    @pytest.mark.parametrize("template", ["It is a {genre} game.", "{value", 5])
+    def test_bad_fact_template_reported(self, valid_cfg, template):
+        valid_cfg["prompts"]["facts"]["genre"] = template
+        assert "prompts.facts.genre:" in _errors(valid_cfg)
+
+    def test_facts_not_an_object_reported(self, valid_cfg):
+        valid_cfg["prompts"]["facts"] = ["genre"]
+        assert "prompts.facts: must be an object" in _errors(valid_cfg)
+
+    def test_reserved_fact_name_reported(self, valid_cfg):
+        valid_cfg["prompts"]["facts"]["name"] = "Called {value}."
+        assert "prompts.facts.name: reserved name" in _errors(valid_cfg)
+
+    def test_null_facts_allows_only_base_keys(self, valid_cfg):
+        valid_cfg["prompts"]["facts"] = None
+        assert _errors(valid_cfg) == ""
+        valid_cfg["prompts"]["sources"]["celeste"]["genre"] = "platformer"
+        assert "prompts.sources.celeste.genre: unknown field" in _errors(valid_cfg)

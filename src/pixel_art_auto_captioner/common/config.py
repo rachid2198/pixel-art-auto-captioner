@@ -85,8 +85,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
         },
     },
     "prompts": {
-        "template": "{instruction} {context} {constraints}",
+        "template": "{instruction} {context} {facts} {constraints}",
         "constraints": "Do not mention the image resolution.",
+        # Curated per-source facts rendered into {facts} (R14).
+        "facts": {
+            "genre": "The game's genre is {value}.",
+            "perspective": "The game's camera perspective is {value}.",
+            "art_style": "The game's art style is {value}.",
+        },
         "default_category": "mixed_collection",
         "categories": {
             "game_crop": "This image is a crop from a screenshot of the video game {source_name}.",
@@ -375,8 +381,12 @@ def _validate_generation(cfg: dict[str, Any], errors: list[str]) -> None:
             )
 
 
+#: Keys every ``prompts.sources`` entry may set; any other key must be a fact field (R14).
+_SOURCE_BASE_KEYS = frozenset({"category", "name"})
+
+
 def _validate_prompts(cfg: dict[str, Any], errors: list[str]) -> None:
-    """Sources resolvable; every referenced category and ``default_category`` exist; no ``system`` (R6)."""
+    """Sources resolvable; categories exist; ``facts`` valid and source fields known (R14); no ``system`` (R6)."""
     section = _section(cfg, "prompts", errors)
     if section is None:
         return
@@ -396,6 +406,26 @@ def _validate_prompts(cfg: dict[str, Any], errors: list[str]) -> None:
             f"prompts.default_category: {default_category!r} is not defined in "
             f"prompts.categories (defined: {sorted(categories)})"
         )
+
+    facts = section.get("facts")
+    if facts is None:
+        facts = {}
+    if not isinstance(facts, dict):
+        errors.append(f"prompts.facts: must be an object, got {facts!r}")
+        facts = {}
+    for field, template in facts.items():
+        if field in _SOURCE_BASE_KEYS:
+            errors.append(f"prompts.facts.{field}: reserved name (used by every source entry)")
+        if not isinstance(template, str):
+            errors.append(f"prompts.facts.{field}: must be a string, got {template!r}")
+            continue
+        try:
+            template.format(value="x")
+        except (KeyError, IndexError, ValueError) as exc:
+            errors.append(
+                f"prompts.facts.{field}: not a valid template (only {{value}} is allowed): "
+                f"{type(exc).__name__}: {exc}"
+            )
 
     sources = section.get("sources")
     if sources is None:
@@ -420,6 +450,18 @@ def _validate_prompts(cfg: dict[str, Any], errors: list[str]) -> None:
                 f"prompts.sources.{folder}.category: {entry['category']!r} is not defined "
                 f"in prompts.categories (defined: {sorted(categories)})"
             )
+        for key, value in entry.items():
+            if key in _SOURCE_BASE_KEYS:
+                continue
+            if key not in facts:
+                errors.append(
+                    f"prompts.sources.{folder}.{key}: unknown field (allowed: "
+                    f"{sorted(_SOURCE_BASE_KEYS)} and the keys of prompts.facts: {sorted(facts)})"
+                )
+            elif value is not None and not (isinstance(value, str) and value.strip()):
+                errors.append(
+                    f"prompts.sources.{folder}.{key}: must be a non-empty string or null, got {value!r}"
+                )
 
 
 def _validate_output(cfg: dict[str, Any], errors: list[str]) -> None:
@@ -470,6 +512,10 @@ def validate_config(cfg: dict) -> None:
       sources mapping could not be resolved because ``prompts.sources_file``
       does not exist, that is reported too.
     - ``prompts.system`` is absent (R6: the system prompt is a fixed constant).
+    - ``prompts.facts`` is an object of string templates using only
+      ``{value}``; every key of a ``prompts.sources`` entry is ``category``,
+      ``name`` or a key of ``prompts.facts``, and fact values are non-empty
+      strings or null (R14).
     - ``runtime.shard`` parses as ``i/N`` with ``0 <= i < N``.
     - Positive ints: ``runtime.batch_size``, every caption type's
       ``max_new_tokens``, ``output.fsync_every``, ``runtime.log_every_s``,

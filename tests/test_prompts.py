@@ -18,6 +18,7 @@ from pixel_art_auto_captioner.common.config import DEFAULT_CONFIG
 from pixel_art_auto_captioner.common.prompts import (
     prompt_config_hash,
     render_prompt,
+    resolve_facts,
     resolve_source,
 )
 
@@ -422,3 +423,66 @@ def test_prompts_import_pulls_in_no_torch_or_vllm():
         [sys.executable, "-c", code], env=env, capture_output=True, text=True, timeout=60,
     )
     assert proc.returncode == 0, proc.stderr
+
+
+# ---------------------------------------------------------------------------
+# Curated source facts (R14)
+# ---------------------------------------------------------------------------
+
+
+def _with_facts(pc: dict, **fields) -> dict:
+    pc["sources"]["celeste"].update(fields)
+    return pc
+
+
+def test_resolve_facts_in_facts_key_order(pc):
+    _with_facts(pc, art_style="modern pixel art", genre="precision platformer", perspective=None)
+    assert list(resolve_facts("celeste", pc).items()) == [
+        ("genre", "precision platformer"), ("art_style", "modern pixel art"),
+    ]
+
+
+def test_resolve_facts_empty_for_unknown_and_plain_sources(pc):
+    assert resolve_facts("stardew-valley", pc) == {}
+    assert resolve_facts("midjourney-dataset", pc) == {}
+    pc["facts"] = None
+    assert resolve_facts("celeste", _with_facts(pc, genre="platformer")) == {}
+
+
+def test_render_prompt_with_all_facts(pc):
+    _with_facts(pc, genre="precision platformer", perspective="side-view",
+                art_style="16-bit console style pixel art")
+    assert render_prompt("long", "celeste", pc) == (
+        "Write a long detailed description for this image. "
+        "This image is a crop from a screenshot of the video game Celeste. "
+        "The game's genre is precision platformer. The game's camera perspective is side-view. "
+        "The game's art style is 16-bit console style pixel art. "
+        "Do not mention the image resolution."
+    )
+
+
+def test_render_prompt_without_facts_unchanged(pc):
+    assert render_prompt("long", "celeste", pc) == (
+        "Write a long detailed description for this image. "
+        "This image is a crop from a screenshot of the video game Celeste. "
+        "Do not mention the image resolution."
+    )
+
+
+def test_template_without_facts_placeholder_omits_them(pc):
+    _with_facts(pc, genre="precision platformer")
+    pc["template"] = "{instruction} {context} {constraints}"
+    assert "platformer" not in render_prompt("long", "celeste", pc)
+
+
+@pytest.mark.parametrize("template", ["It is a {genre} game.", "{value", 7])
+def test_bad_fact_template_raises(pc, template):
+    _with_facts(pc, genre="platformer")
+    pc["facts"]["genre"] = template
+    with pytest.raises(ValueError, match="facts"):
+        render_prompt("long", "celeste", pc)
+
+
+def test_facts_change_prompt_hash(pc):
+    before = prompt_config_hash(pc)
+    assert prompt_config_hash(_with_facts(pc, genre="platformer")) != before

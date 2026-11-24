@@ -107,8 +107,13 @@
     }
   },
   "prompts": {
-    "template": "{instruction} {context} {constraints}",
+    "template": "{instruction} {context} {facts} {constraints}",
     "constraints": "Do not mention the image resolution.",
+    "facts": {
+      "genre": "The game's genre is {value}.",
+      "perspective": "The game's camera perspective is {value}.",
+      "art_style": "The game's art style is {value}."
+    },
     "default_category": "mixed_collection",
     "categories": {
       "game_crop": "This image is a crop from a screenshot of the video game {source_name}.",

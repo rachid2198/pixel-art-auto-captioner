@@ -2,7 +2,7 @@
 
 **Version:** 1.2
 **Date:** 2026-11-21
-**Status:** v1.1 approved by the user on 2026-11-07 (Q1–Q17, D1–D11) and implemented (TODO steps 1–13). v1.2 adds the decisions R1–R13 of the 2026-11-13–21 review (§0.4), all approved by the user; their code changes are TODO steps C1–C10.
+**Status:** v1.1 approved by the user on 2026-11-07 (Q1–Q17, D1–D11) and implemented (TODO steps 1–13). v1.2 adds the decisions R1–R13 of the 2026-11-13–21 review (§0.4), all approved by the user; their code changes are TODO steps C1–C10. R14 (game-development facts in captions, 2026-11-24) is TODO step C11.
 **Supersedes:** v1.1 (2026-11-06), v1.0 (2026-06-16)
 
 ---
@@ -105,6 +105,7 @@ Raised by the post-implementation review of steps 1–13 and decided with the us
 | R11 | **`.gitattributes` also normalises every text file** (proposal P9): `* text=auto`, so the repository always stores LF and CRLF-only differences written by Windows tools never show as changes. `*.sh text eol=lf` (R5) keeps scripts LF on disk. | §14 | C3 |
 | R12 | **A relative `prompts.sources_file` is resolved relative to the config file that sets it**, so a config works from any launch folder; the configs use `"sources.json"`. Without `--config` (built-in defaults only) it stays relative to the launch folder. `input_dir` and `output_dir` stay relative to the launch folder. | §9.1, §9.2 | C10 |
 | R13 | **`input.input_dir` and `output.output_dir` have no default** (`null` in `DEFAULT_CONFIG`) and are required: validation fails with e.g. `input.input_dir is required (set it in the config or pass --input_dir)`. Prevents silent writes to `\data\captions` at a Windows drive root. | §9.2, §9.3 | C10 |
+| R14 | **Captions carry game-development facts** (proposal P12, accepted 2026-11-24). A `sources.json` entry may set `genre`, `perspective` and `art_style`. These are curated per game: the agent drafts them and the user approves them. They are rendered into the prompt as facts through `prompts.facts` and the template placeholder `{facts}`, and copied into each record's `extra`. The model is not asked to guess them: step-14 captions called the side-view game Aground "top-down" in 3 of 20 long captions. The per-image instruction wording (content type, visible layers, palette, outlines, shading, no meta openers, on-screen text) is chosen by a local A/B test and approved by the user before the pilot. | §5.1, §8.3, §9.2, §9.3 | C11 |
 | R10 | **Near-duplicate filtering is a separate, local-only project** (`pixel-art-dedup`), not part of this repository. How its result feeds the captioner (e.g. a keep-list) is decided in that project's design and comes back here as a proposal. | §1.4, §17 | — |
 
 ---
@@ -314,16 +315,21 @@ The prompt for a request is built from three config sections (§9.2):
 
 - `caption_types`: name → `{instruction, max_new_tokens, temperature, top_p, top_k}`
 - `categories`: name → `context` template (may reference `{source_name}`)
-- `sources`: top-level folder → `{category, name}`; unknown folders use `default_category`, and `name` defaults to the folder name title-cased with dashes replaced by spaces
+- `sources`: top-level folder → `{category, name, genre?, perspective?, art_style?}`. Unknown folders use `default_category`, and `name` defaults to the folder name title-cased with dashes replaced by spaces. The optional fields are curated per game (R14).
+- `facts`: field name → sentence template with the single placeholder `{value}` (R14). The defaults are:
+  - `genre`: "The game's genre is {value}."
+  - `perspective`: "The game's camera perspective is {value}."
+  - `art_style`: "The game's art style is {value}."
 
 ```python
 def render_prompt(caption_type: str, source: str, prompt_config: dict) -> str
 ```
 
-Rendering: `prompt_config["template"].format(instruction=..., context=..., constraints=...)`, with whitespace collapsed and stripped. `constraints` is a global string (e.g. "Do not mention the image resolution.").
+Rendering: `prompt_config["template"].format(instruction=..., context=..., facts=..., constraints=...)`, with whitespace collapsed and stripped. `constraints` is a global string (e.g. "Do not mention the image resolution."). `facts` holds one sentence per field that the source entry sets (non-null), in the key order of `prompts.facts`, joined by spaces. It is `""` when the entry sets none. A template without `{facts}` stays valid; it just omits them.
 
 ```python
 def resolve_source(source: str, prompt_config: dict) -> tuple[str, str]   # (category, source_name)
+def resolve_facts(source: str, prompt_config: dict) -> dict[str, str]     # fields set for the source, in prompts.facts order
 def prompt_config_hash(prompt_config: dict) -> str                        # sha256 of canonical JSON, first 12 hex chars
 ```
 
@@ -537,7 +543,7 @@ Invariants (asserted by tests):
 
 ### 8.3 JSONL record
 
-One line per `CaptionRecord` (§3), keys in dataclass order, `ensure_ascii=False`. Paths are POSIX strings. Timestamps look like `"2026-11-06T19:14:05Z"`.
+One line per `CaptionRecord` (§3), keys in dataclass order, `ensure_ascii=False`. Paths are POSIX strings. Timestamps look like `"2026-11-06T19:14:05Z"`. `extra` always holds `source_name`, plus each fact field (`genre`, `perspective`, `art_style`, …) that the source entry sets (R14). Training code can therefore use the facts directly, independent of the model's wording.
 
 ### 8.4 Writing & resume (`common/export_utils.py`)
 
@@ -599,8 +605,11 @@ def validate_config(cfg: dict) -> None                            # raises Value
     }
   },
   "prompts": {
-    "template": "{instruction} {context} {constraints}",
+    "template": "{instruction} {context} {facts} {constraints}",
     "constraints": "Do not mention the image resolution.",
+    "facts": { "genre": "The game's genre is {value}.",
+               "perspective": "The game's camera perspective is {value}.",
+               "art_style": "The game's art style is {value}." },
     "default_category": "mixed_collection",
     "categories": {
       "game_crop":        "This image is a crop from a screenshot of the video game {source_name}.",
@@ -619,7 +628,7 @@ def validate_config(cfg: dict) -> None                            # raises Value
 }
 ```
 
-`configs/sources.json`: `{"celeste": {"category": "game_crop", "name": "Celeste"}, ...}`. A relative `sources_file` is resolved against the directory of the config file that sets it (R12); an absolute path is used as is. Inline `prompts.sources` is also accepted and takes precedence over `sources_file`.
+`configs/sources.json`: `{"celeste": {"category": "game_crop", "name": "Celeste", "genre": "precision platformer", "perspective": "side-view", "art_style": "..."}, ...}`. The fact fields are optional (R14). A relative `sources_file` is resolved against the directory of the config file that sets it (R12); an absolute path is used as is. Inline `prompts.sources` is also accepted and takes precedence over `sources_file`.
 
 `input.exclude_sources` above is abbreviated; the configs carry the full list of the 41 sources excluded by the user (R9): `fallout 2`, `mark-of-the-ninja`, `tyranny`, `steamworld-dig`, `factorio`, `fallout`, `nine-sols`, `lies-of-p`, `craft-the-world`, `oxygen-not-included`, `darkest-dungeon`, `dustforce`, `a-valley-without-wind`, `hollow-knight`, `barotrauma`, `nom-nom-galaxy`, `lobotomy-corporation`, `apotheon`, `hades`, `rimworld`, `cult-of-the-lamb`, `industries-of-titan`, `the-vagrant`, `metro-last-light`, `turing-complete`, `hardcore-mecha`, `highfleet`, `space-rangers-hd-a-war-apart`, `empires-of-the-undergrowth`, `cavalry-girls`, `dyson-sphere-program`, `the-last-federation`, `aquaria`, `helldivers`, `prey`, `terra-invicta`, `trappist`, `synthetik-legion-rising`, `dave-the-diver`, `pinterest-dataset-video-game`, `pinterest-dataset-game`.
 
@@ -631,6 +640,7 @@ def validate_config(cfg: dict) -> None                            # raises Value
 - `backend ∈ {vllm, hf}`; `dtype ∈ {bfloat16, float16, float32}`; `hf.quantization ∈ {nf4, int8, null}`.
 - `enabled_caption_types` is non-empty and each entry exists in `caption_types`.
 - Every category referenced by `sources` exists in `categories`. `default_category` exists.
+- `prompts.facts` is an object of string templates whose only placeholder is `{value}`. Every key of a `sources` entry is `category`, `name` or a key of `prompts.facts`; fact values are non-empty strings or null (R14).
 - `shard` parses as `i/N` with `0 <= i < N`.
 - Positive ints: `batch_size`, `max_new_tokens`, `fsync_every`, `log_every_s`; `num_workers >= 0`; `max_images` is null or > 0.
 - `0 < top_p <= 1`, `temperature >= 0`.
