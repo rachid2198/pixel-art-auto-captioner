@@ -400,8 +400,8 @@ class TestPrecedence:
         assert cfg["runtime"]["batch_size"] == 2
         assert cfg["model"]["backend"] == "hf"
         assert cfg["runtime"]["seed"] == DEFAULT_CONFIG["runtime"]["seed"]
-        assert cfg["prompts"]["sources"]["celeste"] == {"category": "game_crop",
-                                                         "name": "Celeste"}
+        celeste = cfg["prompts"]["sources"]["celeste"]
+        assert (celeste["category"], celeste["name"]) == ("game_crop", "Celeste")
         assert factory.calls == ["hf"]
 
     def test_dry_run_reflects_precedence(self, capsys, tmp_path, dataset) -> None:
@@ -1190,7 +1190,11 @@ class TestSourcesJson:
         assert len(sources) >= 100
         assert list(sources) == sorted(sources)
         for folder, entry in sources.items():
-            assert set(entry) == {"category", "name"}, folder
+            assert {"category", "name"} <= set(entry), folder
+            # Optional curated facts (R14); each must be a key of prompts.facts.
+            assert set(entry) - {"category", "name"} <= set(DEFAULT_CONFIG["prompts"]["facts"]), folder
+            for key in set(entry) - {"category", "name"}:
+                assert isinstance(entry[key], str) and entry[key].strip() == entry[key] != "", folder
             assert entry["category"] in CATEGORIES, folder
             assert isinstance(entry["name"], str) and entry["name"].strip() == entry["name"]
             assert entry["name"], folder
@@ -1211,7 +1215,8 @@ class TestSourcesJson:
         ],
     )
     def test_known_entries(self, folder, category, name) -> None:
-        assert read_json("sources.json")[folder] == {"category": category, "name": name}
+        entry = read_json("sources.json")[folder]
+        assert (entry["category"], entry["name"]) == (category, name)
 
     @pytest.mark.parametrize(
         "folder",
